@@ -2,6 +2,7 @@ import type { Metadata } from 'next';
 import React from 'react';
 import './globals.css';
 import { BRAND } from '@/lib/brand';
+import { DialogProvider } from '@/components/dialog-provider';
 
 export const metadata: Metadata = {
   title: `${BRAND.name} — ${BRAND.tagline}`,
@@ -22,7 +23,7 @@ export default function RootLayout({
   return (
     <html lang="ko">
       <body className="min-h-screen bg-[#F7F8FA] text-slate-900 antialiased">
-        {children}
+        <DialogProvider>{children}</DialogProvider>
       </body>
     </html>
   );

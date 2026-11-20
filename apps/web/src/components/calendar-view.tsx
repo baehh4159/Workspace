@@ -10,6 +10,7 @@ import React, { useEffect, useMemo, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { VisibilityBadge } from '@/components/workspace-primitives';
 import { ContextMenuWrapper, type ContextMenuItem } from '@/components/context-menu';
+import { useDialog } from '@/components/dialog-provider';
 
 export interface CalendarEventItem {
   id: string;
@@ -70,6 +71,7 @@ export function CalendarView({
   initialEvents: CalendarEventItem[];
   projects: CalendarProjectOption[];
 }) {
+  const dialog = useDialog();
   const router = useRouter();
   const [events, setEvents] = useState<CalendarEventItem[]>(initialEvents);
   const [expanded, setExpanded] = useState(false);
@@ -150,10 +152,17 @@ export function CalendarView({
   };
 
   const handleEditEvent = async (evt: CalendarEventItem) => {
-    const nextTitle = window.prompt('일정 제목을 수정하세요:', evt.title);
-    if (nextTitle === null || !nextTitle.trim()) return;
-    const nextLoc = window.prompt('장소를 수정하세요 (비워두면 삭제):', evt.location ?? '');
-    if (nextLoc === null) return;
+    const edited = await dialog.form({
+      title: '일정 수정',
+      confirmLabel: '저장',
+      fields: [
+        { name: 'title', label: '제목', defaultValue: evt.title, required: true, maxLength: 200 },
+        { name: 'location', label: '장소', defaultValue: evt.location ?? '', placeholder: '비워 두면 장소를 지웁니다', maxLength: 200 },
+      ],
+    });
+    if (!edited) return;
+    const nextTitle = edited.title;
+    const nextLoc = edited.location;
 
     setErrorMsg(null);
     const prev = events;
@@ -196,7 +205,7 @@ export function CalendarView({
   };
 
   const handleDelete = async (eventId: string) => {
-    if (!window.confirm('이 일정을 영구 삭제할까요?')) return;
+    if (!(await dialog.confirm({ title: '이 일정을 삭제할까요?', description: '삭제한 일정은 되돌릴 수 없습니다.', confirmLabel: '삭제', tone: 'danger' }))) return;
     const prev = events;
     setErrorMsg(null);
     setEvents((cur) => cur.filter((e) => e.id !== eventId));

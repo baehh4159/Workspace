@@ -10,6 +10,7 @@ import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { FREE_TEAM_MAX_SEATS, PLANS, planName, pricingHref } from '@/lib/plans';
 import { ContextMenuWrapper, type ContextMenuItem } from '@/components/context-menu';
+import { useDialog } from '@/components/dialog-provider';
 
 export interface AiQuotaRow {
   usageType: 'doc_ocr_pages' | 'voice_stt_seconds' | 'text_classify';
@@ -95,6 +96,7 @@ export function SettingsView({
   teamWorkspaces?: TeamWorkspaceOption[];
   transferableItems?: TransferableItem[];
 }) {
+  const dialog = useDialog();
   const router = useRouter();
   const [shares, setShares] = useState<ActiveShareItem[]>(initialShares);
   const [revokingId, setRevokingId] = useState<string | null>(null);
@@ -125,7 +127,15 @@ export function SettingsView({
       : 0;
 
   const handleRevoke = async (shareId: string, skipConfirm = false) => {
-    if (!skipConfirm && !window.confirm('이 공유 링크를 즉시 회수할까요? 외부 접근이 바로 차단됩니다.')) {
+    if (
+      !skipConfirm &&
+      !(await dialog.confirm({
+        title: '공유 링크를 회수할까요?',
+        description: '링크를 가진 사람은 바로 열 수 없게 됩니다.',
+        confirmLabel: '회수',
+        tone: 'danger',
+      }))
+    ) {
       return;
     }
     setRevokingId(shareId);

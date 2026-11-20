@@ -11,6 +11,7 @@ import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { VisibilityBadge } from '@/components/workspace-primitives';
 import { ContextMenuWrapper, type ContextMenuItem } from '@/components/context-menu';
+import { useDialog } from '@/components/dialog-provider';
 
 export interface ProjectListItem {
   id: string;
@@ -30,6 +31,7 @@ export function ProjectsView({
   projects: ProjectListItem[];
   teamWorkspaces?: Array<{ id: string; name: string }>;
 }) {
+  const dialog = useDialog();
   const router = useRouter();
   const [projects, setProjects] = useState<ProjectListItem[]>(initialProjects);
   const [title, setTitle] = useState('');
@@ -114,7 +116,13 @@ export function ProjectsView({
   };
 
   const handleTransferToTeam = async (proj: ProjectListItem, targetTeam: { id: string; name: string }) => {
-    if (!window.confirm(`'${proj.title}' 프로젝트를 [팀] ${targetTeam.name} 워크스페이스로 이동할까요?`)) {
+    if (
+      !(await dialog.confirm({
+        title: '팀 워크스페이스로 옮길까요?',
+        description: `'${proj.title}' 프로젝트를 [팀] ${targetTeam.name}(으)로 옮깁니다. 안에 있는 "나만 보기" 기록은 계속 나만 볼 수 있습니다.`,
+        confirmLabel: '옮기기',
+      }))
+    ) {
       return;
     }
     const prev = projects;
@@ -161,7 +169,7 @@ export function ProjectsView({
   };
 
   const handleDeleteProject = async (proj: ProjectListItem) => {
-    if (!window.confirm(`'${proj.title}' 프로젝트를 영구 삭제할까요?`)) return;
+    if (!(await dialog.confirm({ title: '프로젝트를 삭제할까요?', description: `'${proj.title}' 프로젝트가 영구 삭제되며 되돌릴 수 없습니다.`, confirmLabel: '삭제', tone: 'danger' }))) return;
     const prev = projects;
     setErrorMsg(null);
     setNoticeMsg(null);

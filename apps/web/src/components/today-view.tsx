@@ -13,6 +13,7 @@ import { useRouter } from 'next/navigation';
 import { TagChip, VisibilityBadge, type WorkspaceTag } from '@/components/workspace-primitives';
 import { ContextMenuWrapper, type ContextMenuItem } from '@/components/context-menu';
 import { relativeDueLabel } from '@/lib/deadline-detect';
+import { useDialog } from '@/components/dialog-provider';
 
 export interface TodayEvent {
   id: string;
@@ -134,6 +135,7 @@ export function TodayView({
   onUpdateEventVisibility?: (eventId: string, visibility: 'private' | 'team') => Promise<void>;
   onDeleteEvent?: (eventId: string) => Promise<void>;
 }) {
+  const dialog = useDialog();
   const router = useRouter();
   const [tasks, setTasks] = useState<TodayTask[]>(initialTasks);
   const [events, setEvents] = useState<TodayEvent[]>(initialEvents);
@@ -290,8 +292,13 @@ export function TodayView({
 
   const handleEditTaskTitle = async (task: TodayTask) => {
     if (!onUpdateTask) return;
-    const nextTitle = window.prompt('할 일 제목을 수정하세요:', task.title);
-    if (nextTitle === null || !nextTitle.trim()) return;
+    const edited = await dialog.form({
+      title: '할 일 제목 수정',
+      confirmLabel: '저장',
+      fields: [{ name: 'title', label: '제목', defaultValue: task.title, required: true, maxLength: 200 }],
+    });
+    if (!edited) return;
+    const nextTitle = edited.title;
     const prev = tasks;
     setTasks((cur) => cur.map((t) => (t.id === task.id ? { ...t, title: nextTitle.trim() } : t)));
     try {
@@ -315,7 +322,7 @@ export function TodayView({
 
   const handleDeleteTask = async (taskId: string) => {
     if (!onDeleteTask) return;
-    if (!window.confirm('이 할 일을 영구 삭제할까요?')) return;
+    if (!(await dialog.confirm({ title: '이 할 일을 삭제할까요?', description: '삭제한 할 일은 되돌릴 수 없습니다.', confirmLabel: '삭제', tone: 'danger' }))) return;
     const prev = tasks;
     setTasks((cur) => cur.filter((t) => t.id !== taskId));
     try {
@@ -339,7 +346,7 @@ export function TodayView({
 
   const handleDeleteEvent = async (eventId: string) => {
     if (!onDeleteEvent) return;
-    if (!window.confirm('이 일정을 영구 삭제할까요?')) return;
+    if (!(await dialog.confirm({ title: '이 일정을 삭제할까요?', description: '삭제한 일정은 되돌릴 수 없습니다.', confirmLabel: '삭제', tone: 'danger' }))) return;
     const prev = events;
     setEvents((cur) => cur.filter((e) => e.id !== eventId));
     try {

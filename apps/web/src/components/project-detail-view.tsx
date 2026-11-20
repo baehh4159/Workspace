@@ -11,6 +11,7 @@ import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { VisibilityBadge } from '@/components/workspace-primitives';
 import { ContextMenuWrapper, type ContextMenuItem } from '@/components/context-menu';
+import { useDialog } from '@/components/dialog-provider';
 
 export interface ProjectTaskItem {
   id: string;
@@ -48,6 +49,7 @@ export function ProjectDetailView({
   initialRecords: ProjectRecordItem[];
   linkedDocs: LinkedDocItem[];
 }) {
+  const dialog = useDialog();
   const router = useRouter();
   const [tasks, setTasks] = useState<ProjectTaskItem[]>(initialTasks);
   const [records, setRecords] = useState<ProjectRecordItem[]>(initialRecords);
@@ -114,7 +116,7 @@ export function ProjectDetailView({
   };
 
   const handleDeleteTask = async (taskId: string) => {
-    if (!window.confirm('이 할 일을 영구 삭제할까요?')) return;
+    if (!(await dialog.confirm({ title: '이 할 일을 삭제할까요?', description: '삭제한 할 일은 되돌릴 수 없습니다.', confirmLabel: '삭제', tone: 'danger' }))) return;
     const prev = tasks;
     setErrorMsg(null);
     setTasks((cur) => cur.filter((t) => t.id !== taskId));
@@ -209,8 +211,13 @@ export function ProjectDetailView({
   };
 
   const handleEditRecord = async (rec: ProjectRecordItem) => {
-    const nextContent = window.prompt('기록 내용을 수정하세요:', rec.contentMarkdown);
-    if (nextContent === null || !nextContent.trim()) return;
+    const edited = await dialog.form({
+      title: '기록 수정',
+      confirmLabel: '저장',
+      fields: [{ name: 'content', label: '내용', defaultValue: rec.contentMarkdown, required: true, multiline: true }],
+    });
+    if (!edited) return;
+    const nextContent = edited.content;
     const prev = records;
     setErrorMsg(null);
     setRecords((cur) =>
@@ -253,7 +260,7 @@ export function ProjectDetailView({
   };
 
   const handleDeleteRecord = async (recordId: string) => {
-    if (!window.confirm('이 기록을 영구 삭제할까요?')) return;
+    if (!(await dialog.confirm({ title: '이 기록을 삭제할까요?', description: '삭제한 기록은 되돌릴 수 없습니다.', confirmLabel: '삭제', tone: 'danger' }))) return;
     const prev = records;
     setErrorMsg(null);
     setRecords((cur) => cur.filter((r) => r.id !== recordId));

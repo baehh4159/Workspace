@@ -13,6 +13,7 @@ import { ExpiryBadge, TagChip, VisibilityBadge, type WorkspaceTag } from '@/comp
 import { relativeDueLabel } from '@/lib/deadline-detect';
 import { pricingHref } from '@/lib/plans';
 import { ContextMenuWrapper, type ContextMenuItem } from '@/components/context-menu';
+import { useDialog } from '@/components/dialog-provider';
 
 export interface InboxCardItem {
   id: string;
@@ -106,6 +107,7 @@ export function InboxView({
   /** Runs AI reading (OCR / speech-to-text + summary) for one item. */
   onRunAi?: (itemId: string) => Promise<void>;
 }) {
+  const dialog = useDialog();
   const [items, setItems] = useState<InboxCardItem[]>(initialItems);
   const [activeIndex, setActiveIndex] = useState(0);
   const [showAutoFolded, setShowAutoFolded] = useState(false);
@@ -233,7 +235,7 @@ export function InboxView({
 
   const handleDelete = async (item: InboxCardItem) => {
     if (!onDeleteItem) return;
-    if (!window.confirm('이 항목과 원본 파일을 영구 삭제할까요?')) return;
+    if (!(await dialog.confirm({ title: '이 항목을 삭제할까요?', description: '원본 파일도 함께 지워지며 되돌릴 수 없습니다.', confirmLabel: '삭제', tone: 'danger' }))) return;
     // Flush any pending Undo triage before removing another item
     flushPendingCommit(false);
     const prev = items;
@@ -327,8 +329,8 @@ export function InboxView({
       ) {
         return;
       }
-      // Never hijack single-key shortcuts while a context menu is open
-      if (document.querySelector('[role="menu"]')) return;
+      // Never hijack single-key shortcuts while a context menu or dialog is open
+      if (document.querySelector('[role="menu"], [aria-modal="true"]')) return;
 
       if (e.key === 'Escape') {
         setProjectPickerItemId(null);
