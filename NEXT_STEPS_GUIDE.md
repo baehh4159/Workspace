@@ -49,6 +49,8 @@ Google Drive에서 `universal-workspace` 폴더를 로컬 PC로 내려받았다�
    - `CRON_SECRET`: 아무 긴 무작위 문자열 (예: `openssl rand -hex 32`로 생성)
    - `AI_PROVIDER_ENDPOINT`: 기본값 `https://api.openai.com/v1` (사용할 OpenAI 호환 엔드포인트)
    - `AI_PROVIDER_API_KEY`: 발급받은 AI API 키 (미입력 시 AI 기능 외 기본 기능은 정상 동작)
+   - `AI_TEXT_MODEL` / `AI_TRANSCRIBE_MODEL`: (선택) 문서·이미지를 읽을 모델과 음성 받아쓰기 모델. 기본값은 `gpt-4o-mini` / `whisper-1`. 문서용 모델은 이미지와 PDF 입력을 지원해야 합니다.
+   - `AI_PRICE_*`: (선택) 사용량 원장(`ai_usage_ledger`)에 남길 예상 비용 계산용 단가(USD)
    - `NOTIFICATION_WEBHOOK_URL`: (선택) 무료 플랜 7일/1일 만료 알림용 웹훅 URL
 2. **모바일 (`apps/mobile`)**: `apps/mobile/.env.example`을 복사해 `apps/mobile/.env` 파일을 만들고 값을 채웁니다.
    - `EXPO_PUBLIC_SUPABASE_URL` / `EXPO_PUBLIC_SUPABASE_ANON_KEY`: 웹과 동일한 Supabase 값

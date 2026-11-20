@@ -32,7 +32,8 @@ const ALLOWED_DOC_TYPES = new Set(Object.values(DOC_TYPES_BY_EXT));
 const ALLOWED_AUDIO_TYPES = new Set(['audio/webm', 'audio/mp4', 'audio/m4a', 'audio/mpeg', 'audio/wav']);
 
 /** Accept attribute for <input type="file"> (documents only). */
-export const DOCUMENT_ACCEPT = '.pdf,.jpg,.jpeg,.png,.webp,.heic,application/pdf,image/jpeg,image/png,image/webp,image/heic';
+// HEIC is deliberately not listed: iPhones then convert photos to JPEG, which the AI can read.
+export const DOCUMENT_ACCEPT = '.pdf,.jpg,.jpeg,.png,.webp,application/pdf,image/jpeg,image/png,image/webp';
 
 /** Returns the upload MIME type for a scanned document, or null when the file type is not supported. */
 export function resolveDocumentMime(file: File): string | null {
@@ -124,7 +125,18 @@ export async function uploadAndIngest(params: {
 
 export type AiRunResult =
   | { ok: true }
-  | { ok: false; code: 'AI_QUOTA_EXCEEDED' | 'ORIGINAL_FILE_UNAVAILABLE' | 'AI_NOT_CONFIGURED' | 'FAILED' };
+  | {
+      ok: false;
+      code:
+        | 'AI_QUOTA_EXCEEDED'
+        | 'ORIGINAL_FILE_UNAVAILABLE'
+        | 'AI_NOT_CONFIGURED'
+        | 'UNSUPPORTED_FILE'
+        | 'FILE_TOO_LARGE'
+        | 'RATE_LIMITED'
+        | 'TIMEOUT'
+        | 'FAILED';
+    };
 
 export async function runAiProcessing(itemId: string): Promise<AiRunResult> {
   try {
@@ -134,7 +146,13 @@ export async function runAiProcessing(itemId: string): Promise<AiRunResult> {
     if (res.status === 402 || code === 'AI_QUOTA_EXCEEDED') return { ok: false, code: 'AI_QUOTA_EXCEEDED' };
     if (code === 'ALREADY_PROCESSING_OR_SUCCEEDED') return { ok: true };
     if (code === 'ORIGINAL_FILE_UNAVAILABLE') return { ok: false, code: 'ORIGINAL_FILE_UNAVAILABLE' };
-    if (code === 'AI_PROVIDER_NOT_CONFIGURED') return { ok: false, code: 'AI_NOT_CONFIGURED' };
+    if (code === 'AI_PROVIDER_NOT_CONFIGURED' || code === 'AI_PROVIDER_AUTH_FAILED') {
+      return { ok: false, code: 'AI_NOT_CONFIGURED' };
+    }
+    if (code === 'AI_UNSUPPORTED_FILE_TYPE') return { ok: false, code: 'UNSUPPORTED_FILE' };
+    if (code === 'FILE_TOO_LARGE_FOR_AI') return { ok: false, code: 'FILE_TOO_LARGE' };
+    if (code === 'AI_PROVIDER_RATE_LIMITED') return { ok: false, code: 'RATE_LIMITED' };
+    if (code === 'AI_PROVIDER_TIMEOUT') return { ok: false, code: 'TIMEOUT' };
     return { ok: false, code: 'FAILED' };
   } catch {
     return { ok: false, code: 'FAILED' };
@@ -167,7 +185,15 @@ export function describeAiError(code: Exclude<AiRunResult, { ok: true }>['code']
     case 'ORIGINAL_FILE_UNAVAILABLE':
       return '원본 파일이 없어 AI로 읽을 수 없습니다.';
     case 'AI_NOT_CONFIGURED':
-      return 'AI 기능이 아직 설정되지 않았습니다. (관리자: AI_PROVIDER_ENDPOINT·AI_PROVIDER_API_KEY 설정 필요)';
+      return 'AI 기능이 아직 설정되지 않았습니다. (관리자: AI_PROVIDER_ENDPOINT·AI_PROVIDER_API_KEY 확인 필요)';
+    case 'UNSUPPORTED_FILE':
+      return 'HEIC 사진은 아직 AI가 읽을 수 없습니다. JPG·PNG·PDF로 올려 주세요.';
+    case 'FILE_TOO_LARGE':
+      return '20MB가 넘는 파일은 AI가 읽을 수 없습니다.';
+    case 'RATE_LIMITED':
+      return 'AI 요청이 몰려 있습니다. 잠시 후 다시 시도해 주세요.';
+    case 'TIMEOUT':
+      return 'AI 응답이 늦어 중단했습니다. 다시 시도해 주세요.';
     default:
       return 'AI가 문서를 읽지 못했습니다. 잠시 후 다시 시도해 주세요.';
   }

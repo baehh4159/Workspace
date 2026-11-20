@@ -7,7 +7,7 @@
  */
 import { NextResponse } from 'next/server';
 import { UuidSchema } from '@workspace/core/schemas';
-import { processInboxItemWithAi, resolveAiMetering } from '@workspace/ai/worker';
+import { mimeTypeFromStoragePath, processInboxItemWithAi, resolveAiMetering } from '@workspace/ai/worker';
 import { DEMO_MODE } from '@/lib/demo/mock-supabase';
 import { simulateAiProcessing } from '@/lib/demo/ai-simulator';
 import {
@@ -139,9 +139,11 @@ export async function POST(
       rawText: item.raw_text,
       pageCount: item.page_count,
       audioSeconds: item.audio_seconds,
+      mimeType: mimeTypeFromStoragePath(item.storage_path as string | null),
+      title: (item.title as string | null) ?? null,
     };
     const result = DEMO_MODE
-      ? await simulateAiProcessing({ ...job, title: (item.title as string | null) ?? null })
+      ? await simulateAiProcessing({ ...job, title: job.title ?? null })
       : await processInboxItemWithAi(job);
 
     if (result.actualUnits > units) {
