@@ -36,35 +36,43 @@ export default async function MainWorkspaceLayout({
         </div>
       )}
       <header className="sticky top-0 z-30 border-b border-slate-200 bg-white/95 backdrop-blur">
-        <div className="mx-auto flex h-14 max-w-4xl items-center justify-between gap-3 px-4 sm:px-6">
-          <div className="flex min-w-0 items-center gap-6">
-            <Link href="/today" className="shrink-0 text-sm font-bold tracking-tight text-slate-900">
-              {BRAND.name}
-            </Link>
-            <WorkspaceNav />
-          </div>
-
-          <div className="flex shrink-0 items-center gap-2">
-            {activePlan === 'free' ? (
-              <Link
-                href={pricingHref('header')}
-                className="hidden rounded-full border border-blue-200 bg-blue-50 px-2.5 py-1 text-xs font-semibold text-blue-700 hover:bg-blue-100 sm:inline-block"
-              >
-                업그레이드
+        <div className="mx-auto max-w-4xl px-4 sm:px-6">
+          <div className="flex h-14 items-center justify-between gap-3">
+            <div className="flex min-w-0 items-center gap-6">
+              <Link href="/today" className="shrink-0 text-sm font-bold tracking-tight text-slate-900">
+                {BRAND.name}
               </Link>
-            ) : (
-              <span className="hidden rounded-full bg-slate-900 px-2.5 py-1 text-xs font-semibold text-white sm:inline-block">
-                {planName(activePlan)}
-              </span>
-            )}
-            <WorkspaceSwitcher
-              workspaces={session.workspaces.map((ws) => ({
-                id: ws.id,
-                name: ws.name,
-                type: ws.type,
-              }))}
-              activeWorkspaceId={session.activeWorkspace.id}
-            />
+              <div className="hidden sm:block">
+                <WorkspaceNav />
+              </div>
+            </div>
+
+            <div className="flex shrink-0 items-center gap-2">
+              {activePlan === 'free' ? (
+                <Link
+                  href={pricingHref('header')}
+                  className="rounded-full border border-blue-200 bg-blue-50 px-2.5 py-1 text-xs font-semibold text-blue-700 hover:bg-blue-100"
+                >
+                  업그레이드
+                </Link>
+              ) : (
+                <span className="rounded-full bg-slate-900 px-2.5 py-1 text-xs font-semibold text-white">
+                  {planName(activePlan)}
+                </span>
+              )}
+              <WorkspaceSwitcher
+                workspaces={session.workspaces.map((ws) => ({
+                  id: ws.id,
+                  name: ws.name,
+                  type: ws.type,
+                }))}
+                activeWorkspaceId={session.activeWorkspace.id}
+              />
+            </div>
+          </div>
+          {/* Phones: full-width tab row so every section stays reachable */}
+          <div className="-mx-1 pb-2 sm:hidden">
+            <WorkspaceNav />
           </div>
         </div>
       </header>

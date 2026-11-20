@@ -27,7 +27,25 @@ function getKstDayBounds(now = new Date()): { startIso: string; endIso: string }
   };
 }
 
-export default async function TodayPage() {
+const JOIN_NOTICES: Record<string, string> = {
+  joined: '팀 워크스페이스에 합류했습니다. 팀과 공유된 할 일과 일정이 여기에 함께 표시됩니다.',
+  team_seat_limit_reached:
+    '팀 좌석이 가득 차 합류하지 못했습니다. 팀 소유자에게 팀 플랜으로 좌석을 늘려 달라고 요청해 주세요.',
+};
+
+export default async function TodayPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ joined?: string; joinError?: string }>;
+}) {
+  const { joined, joinError } = await searchParams;
+  const initialNotice =
+    joinError && Object.prototype.hasOwnProperty.call(JOIN_NOTICES, joinError)
+      ? JOIN_NOTICES[joinError]
+      : joined === '1'
+        ? JOIN_NOTICES.joined
+        : null;
+
   const session = await getServerWorkspaceSession();
   if (!session) {
     redirect('/login');
@@ -101,6 +119,7 @@ export default async function TodayPage() {
     <TodayClientShell
       key={wsId}
       workspaceId={wsId}
+      initialNotice={initialNotice}
       unprocessedCount={countRes.count ?? 0}
       events={events}
       initialTasks={initialTasks}

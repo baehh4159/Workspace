@@ -71,7 +71,8 @@ const FAQ = [
 ];
 
 export default async function LandingPage() {
-  const session = await getServerWorkspaceSession();
+  // Public page: render as signed-out if the auth backend is unreachable.
+  const session = await getServerWorkspaceSession().catch(() => null);
   const signedIn = Boolean(session);
   const primaryHref = signedIn ? '/today' : '/login?next=/today';
   const primaryLabel = signedIn ? (DEMO_MODE ? '데모 열어 보기' : '내 워크스페이스 열기') : '무료로 시작하기';

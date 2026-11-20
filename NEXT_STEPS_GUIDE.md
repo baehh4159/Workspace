@@ -32,6 +32,7 @@ Google Drive에서 `universal-workspace` 폴더를 로컬 PC로 내려받았다�
    5. `0005_phase5_batch_tags_and_seed.sql`
    6. `0006_phase6_push_tokens.sql`
    7. `0007_phase7_team_transfer.sql`
+   8. `0008_phase8_upgrade_intents.sql` (요금제 업그레이드 사전 신청 기록)
 3. **Storage 버킷 생성**: 좌측 **Storage → New bucket**에서 이름이 `inbox-originals`인 버킷을 만듭니다.
    - ⚠️ **주의**: **Public bucket 체크를 반드시 해제(Private)** 해야 합니다.
 4. **OAuth 로그인 설정**: 좌측 **Authentication → Providers**에서 **Google**과 **Kakao**를 활성화하고, **Authentication → URL Configuration → Redirect URLs**에 아래 3개 주소를 모두 등록합니다.

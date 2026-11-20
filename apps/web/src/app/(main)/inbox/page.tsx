@@ -9,6 +9,7 @@ import { getServerWorkspaceSession } from '@/lib/supabase-server';
 import { InboxClientShell } from '@/components/inbox-client-shell';
 import type { InboxCardItem, ProjectOption } from '@/components/inbox-view';
 import type { WorkspaceTag } from '@/components/workspace-primitives';
+import { detectAmount, detectDeadline } from '@/lib/deadline-detect';
 
 export const dynamic = 'force-dynamic';
 
@@ -32,7 +33,7 @@ export default async function InboxPage() {
     session.userClient
       .from('inbox_items')
       .select(
-        'id, owner_user_id, source_type, title, summary_text, raw_text, visibility, triage_status, created_at, original_expires_at, storage_path, original_purged_at'
+        'id, owner_user_id, source_type, title, summary_text, extracted_text, raw_text, visibility, triage_status, processing_status, created_at, original_expires_at, storage_path, original_purged_at'
       )
       .eq('workspace_id', wsId)
       .in('triage_status', ['unprocessed', 'auto_folded'])
@@ -70,20 +71,39 @@ export default async function InboxPage() {
     }
   }
 
-  const initialItems: InboxCardItem[] = rawItems.map((row) => ({
-    id: row.id as string,
-    sourceType: row.source_type as InboxCardItem['sourceType'],
-    title: (row.title as string | null) ?? null,
-    summaryText: (row.summary_text as string | null) ?? null,
-    rawText: (row.raw_text as string | null) ?? null,
-    visibility: row.visibility as 'private' | 'team',
-    triageStatus: row.triage_status as InboxCardItem['triageStatus'],
-    createdAt: row.created_at as string,
-    originalExpiresAt: (row.original_expires_at as string | null) ?? null,
-    hasOriginal: Boolean(row.storage_path && !row.original_purged_at),
-    isOwner: row.owner_user_id === session.user.id,
-    tags: tagsByItemId.get(row.id as string) ?? [],
-  }));
+  const now = new Date();
+  const initialItems: InboxCardItem[] = rawItems.map((row) => {
+    // Deadline & amount come from the AI summary/OCR text (or the memo itself) — no extra AI cost.
+    const text = [row.summary_text, row.extracted_text, row.raw_text, row.title]
+      .filter((t): t is string => typeof t === 'string' && t.length > 0)
+      .join('\n');
+    const deadline = detectDeadline(text, now);
+    const amount = detectAmount(text);
+    return {
+      id: row.id as string,
+      sourceType: row.source_type as InboxCardItem['sourceType'],
+      title: (row.title as string | null) ?? null,
+      summaryText: (row.summary_text as string | null) ?? null,
+      rawText: (row.raw_text as string | null) ?? null,
+      visibility: row.visibility as 'private' | 'team',
+      triageStatus: row.triage_status as InboxCardItem['triageStatus'],
+      createdAt: row.created_at as string,
+      originalExpiresAt: (row.original_expires_at as string | null) ?? null,
+      hasOriginal: Boolean(row.storage_path && !row.original_purged_at),
+      isOwner: row.owner_user_id === session.user.id,
+      tags: tagsByItemId.get(row.id as string) ?? [],
+      processingStatus: row.processing_status as InboxCardItem['processingStatus'],
+      deadline: deadline
+        ? {
+            dueAt: deadline.dueAt,
+            label: deadline.label,
+            shortLabel: deadline.shortLabel,
+            daysFromToday: deadline.daysFromToday,
+          }
+        : null,
+      amountLabel: amount?.label ?? null,
+    };
+  });
 
   const projects: ProjectOption[] = (projectsRes.data ?? []).map((p) => ({
     id: p.id as string,

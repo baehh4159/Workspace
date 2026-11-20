@@ -8,7 +8,10 @@
  *  - Optimistic rollback on API failure + activeIndex clamping + 40x40 source icon
  */
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import Link from 'next/link';
 import { ExpiryBadge, TagChip, VisibilityBadge, type WorkspaceTag } from '@/components/workspace-primitives';
+import { relativeDueLabel } from '@/lib/deadline-detect';
+import { pricingHref } from '@/lib/plans';
 import { ContextMenuWrapper, type ContextMenuItem } from '@/components/context-menu';
 
 export interface InboxCardItem {
@@ -24,6 +27,11 @@ export interface InboxCardItem {
   hasOriginal?: boolean;
   isOwner?: boolean;
   tags: WorkspaceTag[];
+  processingStatus?: 'ready' | 'processing' | 'succeeded' | 'failed';
+  /** Deadline found in the document/memo text (see lib/deadline-detect.ts). */
+  deadline?: { dueAt: string; label: string; shortLabel: string; daysFromToday: number } | null;
+  /** Money amount found in the text, e.g. "48,320원". */
+  amountLabel?: string | null;
 }
 
 export interface ProjectOption {
@@ -33,7 +41,7 @@ export interface ProjectOption {
 }
 
 type TriagePayload =
-  | { action: 'convert_to_task'; taskTitle: string }
+  | { action: 'convert_to_task'; taskTitle: string; taskDueAt?: string }
   | { action: 'link_to_project'; projectId: string }
   | { action: 'archive' };
 
@@ -48,6 +56,26 @@ function daysUntil(iso: string | null): number | null {
   if (!iso) return null;
   const diff = new Date(iso).getTime() - Date.now();
   return Math.ceil(diff / 86_400_000);
+}
+
+function buildTaskPayload(item: InboxCardItem): TriagePayload {
+  const base = item.title || item.rawText?.slice(0, 60) || '새 할 일';
+  const title =
+    item.amountLabel && !base.includes(item.amountLabel) ? `${base} · ${item.amountLabel}` : base;
+  return {
+    action: 'convert_to_task',
+    taskTitle: title.slice(0, 200),
+    ...(item.deadline ? { taskDueAt: item.deadline.dueAt } : {}),
+  };
+}
+
+function canRunAi(item: InboxCardItem): boolean {
+  return (
+    (item.sourceType === 'scanner_doc' || item.sourceType === 'quick_voice') &&
+    Boolean(item.hasOriginal) &&
+    !item.summaryText &&
+    (item.processingStatus === 'ready' || item.processingStatus === 'failed')
+  );
 }
 
 const SOURCE_META: Record<
@@ -67,6 +95,7 @@ export function InboxView({
   onDownloadOriginal,
   onToggleVisibility,
   onDeleteItem,
+  onRunAi,
 }: {
   initialItems?: InboxCardItem[];
   projects?: ProjectOption[];
@@ -74,6 +103,8 @@ export function InboxView({
   onDownloadOriginal?: (itemId: string) => void;
   onToggleVisibility?: (itemId: string, visibility: 'private' | 'team') => Promise<void>;
   onDeleteItem?: (itemId: string) => Promise<void>;
+  /** Runs AI reading (OCR / speech-to-text + summary) for one item. */
+  onRunAi?: (itemId: string) => Promise<void>;
 }) {
   const [items, setItems] = useState<InboxCardItem[]>(initialItems);
   const [activeIndex, setActiveIndex] = useState(0);
@@ -81,6 +112,7 @@ export function InboxView({
   const [projectPickerItemId, setProjectPickerItemId] = useState<string | null>(null);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
   const [undoToast, setUndoToast] = useState<{ itemId: string; label: string } | null>(null);
+  const [aiRunningIds, setAiRunningIds] = useState<string[]>([]);
 
   const undoTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const pendingCommitRef = useRef<PendingCommit | null>(null);
@@ -215,6 +247,17 @@ export function InboxView({
     }
   };
 
+  const handleRunAi = async (item: InboxCardItem) => {
+    if (!onRunAi || aiRunningIds.includes(item.id)) return;
+    setErrorMsg(null);
+    setAiRunningIds((cur) => [...cur, item.id]);
+    try {
+      await onRunAi(item.id);
+    } finally {
+      setAiRunningIds((cur) => cur.filter((x) => x !== item.id));
+    }
+  };
+
   const buildItemMenu = (item: InboxCardItem): ContextMenuItem[] => {
     const menu: ContextMenuItem[] = [];
     if (item.hasOriginal && onDownloadOriginal) {
@@ -225,15 +268,19 @@ export function InboxView({
         onSelect: () => onDownloadOriginal(item.id),
       });
     }
+    if (onRunAi && canRunAi(item)) {
+      menu.push({
+        id: 'run-ai',
+        label: item.sourceType === 'quick_voice' ? 'AI로 받아쓰기' : 'AI로 읽기 (요약·마감일 찾기)',
+        group: 1,
+        onSelect: () => void handleRunAi(item),
+      });
+    }
     menu.push({
       id: 'to-task',
-      label: '할 일로 전환',
+      label: item.deadline ? `할 일로 전환 (${item.deadline.shortLabel} 마감)` : '할 일로 전환',
       group: 1,
-      onSelect: () =>
-        scheduleTriage(item, {
-          action: 'convert_to_task',
-          taskTitle: item.title || item.rawText?.slice(0, 60) || '새 할 일',
-        }),
+      onSelect: () => scheduleTriage(item, buildTaskPayload(item)),
     });
     if (projects.length > 0) {
       menu.push({
@@ -294,10 +341,7 @@ export function InboxView({
       const key = e.key.toLowerCase();
       if (key === 't') {
         e.preventDefault();
-        scheduleTriage(target, {
-          action: 'convert_to_task',
-          taskTitle: target.title || target.rawText?.slice(0, 60) || '새 할 일',
-        });
+        scheduleTriage(target, buildTaskPayload(target));
       } else if (key === 'p') {
         e.preventDefault();
         setProjectPickerItemId((curr) => (curr === target.id ? null : target.id));
@@ -362,6 +406,14 @@ export function InboxView({
                           }
                         />
                       )}
+                      {expiryDays !== null && expiryDays >= 0 && expiryDays <= 7 && (
+                        <Link
+                          href={pricingHref('expiry')}
+                          className="text-xs font-medium text-blue-700 hover:underline"
+                        >
+                          계속 보관하기
+                        </Link>
+                      )}
                     </div>
                     <div className="flex shrink-0 items-center gap-1.5">
                       <VisibilityBadge visibility={item.visibility} />
@@ -373,9 +425,63 @@ export function InboxView({
                     {item.title || '제목 없는 항목'}
                   </h2>
                   {(item.summaryText || item.rawText) && (
-                    <p className="mt-1 line-clamp-1 text-sm text-slate-600">
+                    <p className="mt-1 line-clamp-2 text-sm text-slate-600">
                       {item.summaryText || item.rawText}
                     </p>
+                  )}
+
+                  {(aiRunningIds.includes(item.id) || item.processingStatus === 'processing') && (
+                    <p className="mt-2 inline-flex items-center gap-1.5 text-xs font-medium text-blue-700" role="status">
+                      <span className="h-3 w-3 animate-spin rounded-full border-2 border-blue-200 border-t-blue-700" aria-hidden="true" />
+                      {item.sourceType === 'quick_voice' ? 'AI가 받아쓰는 중…' : 'AI가 읽는 중…'}
+                    </p>
+                  )}
+
+                  {onRunAi && canRunAi(item) && !aiRunningIds.includes(item.id) && (
+                    <div className="mt-2 flex flex-wrap items-center gap-2 rounded-lg bg-blue-50/60 px-3 py-2 text-xs text-slate-700">
+                      <span>
+                        {item.processingStatus === 'failed'
+                          ? '지난번 AI 읽기에 실패했습니다.'
+                          : item.sourceType === 'quick_voice'
+                            ? '아직 글자로 바꾸지 않은 음성입니다.'
+                            : '아직 AI가 읽지 않은 문서입니다.'}
+                      </span>
+                      <button
+                        type="button"
+                        onClick={() => void handleRunAi(item)}
+                        className="rounded-md bg-white px-2.5 py-1 font-semibold text-blue-700 ring-1 ring-inset ring-blue-200 hover:bg-blue-50"
+                      >
+                        {item.processingStatus === 'failed'
+                          ? '다시 시도'
+                          : item.sourceType === 'quick_voice'
+                            ? 'AI로 받아쓰기'
+                            : 'AI로 읽기'}
+                      </button>
+                    </div>
+                  )}
+
+                  {(item.deadline || item.amountLabel) && (
+                    <div className="mt-2 flex flex-wrap gap-1.5">
+                      {item.deadline && (
+                        <span
+                          className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-xs font-semibold ring-1 ring-inset ${
+                            item.deadline.daysFromToday < 0
+                              ? 'bg-red-50 text-red-700 ring-red-200'
+                              : item.deadline.daysFromToday <= 3
+                                ? 'bg-amber-50 text-amber-800 ring-amber-200'
+                                : 'bg-blue-50 text-blue-800 ring-blue-200'
+                          }`}
+                          title="문서 내용에서 찾은 마감일입니다. '할 일로'를 누르면 마감일이 함께 저장됩니다."
+                        >
+                          📅 {item.deadline.label} 마감 · {relativeDueLabel(item.deadline.daysFromToday)}
+                        </span>
+                      )}
+                      {item.amountLabel && (
+                        <span className="inline-flex items-center gap-1 rounded-full bg-slate-100 px-2 py-0.5 text-xs font-medium text-slate-700">
+                          💳 {item.amountLabel}
+                        </span>
+                      )}
+                    </div>
                   )}
 
                   {item.tags.length > 0 && (
@@ -391,15 +497,10 @@ export function InboxView({
               <div className="mt-3.5 flex items-center gap-2 border-t border-slate-100 pt-3">
                 <button
                   type="button"
-                  onClick={() =>
-                    scheduleTriage(item, {
-                      action: 'convert_to_task',
-                      taskTitle: item.title || item.rawText?.slice(0, 60) || '새 할 일',
-                    })
-                  }
+                  onClick={() => scheduleTriage(item, buildTaskPayload(item))}
                   className="rounded-lg bg-blue-700 px-3 py-1.5 text-xs font-semibold text-white hover:bg-blue-800"
                 >
-                  할 일로
+                  {item.deadline ? `할 일로 · ${item.deadline.shortLabel} 마감` : '할 일로'}
                 </button>
 
                 <div className="relative">
@@ -482,7 +583,7 @@ export function InboxView({
         <div className="rounded-xl border border-slate-200 bg-white px-6 py-12 text-center">
           <p className="text-sm font-medium text-slate-700">지금 정리할 항목이 없습니다.</p>
           <p className="mt-1 text-xs text-slate-500">
-            스캐너로 문서를 찍거나 빠른 메모를 남기면 이곳에 도착합니다.
+            위에 PDF·사진을 끌어다 놓거나, 스캐너 앱으로 찍거나, 오늘 화면에서 메모를 남기면 이곳에 도착합니다.
           </p>
         </div>
       ) : (

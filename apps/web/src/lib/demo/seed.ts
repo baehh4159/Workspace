@@ -24,6 +24,15 @@ function kst(days: number, hour: number, minute = 0): string {
   return new Date(base + days * 86_400_000 + (hour * 60 + minute) * 60_000).toISOString();
 }
 
+/** KST calendar date `days` from today, for text inside sample documents. */
+function day(days: number): { iso: string; m: number; d: number } {
+  const k = new Date(Date.now() + 9 * 3_600_000 + days * 86_400_000);
+  const y = k.getUTCFullYear();
+  const m = k.getUTCMonth() + 1;
+  const d = k.getUTCDate();
+  return { iso: `${y}-${String(m).padStart(2, '0')}-${String(d).padStart(2, '0')}`, m, d };
+}
+
 export function createSeed(): Store {
   const W = DEMO_PERSONAL_WS;
   const T = DEMO_TEAM_WS;
@@ -38,14 +47,28 @@ export function createSeed(): Store {
     { id: id('20', 5), workspace_id: T, owner_user_id: TEAMMATE_ID, visibility: 'team', title: '4분기 마케팅 캠페인', status: 'active', created_at: kst(-30, 9), updated_at: kst(-3, 9) },
   ];
 
+  const billDue = day(9);
+  const thisMonth = day(0).m;
+  const dentalDay = day(-8);
+  const leaseStart = day(-676);
+  const leaseEnd = day(54);
+  const DAY = 86_400_000;
+  const expiresFrom = (createdIso: string) => new Date(new Date(createdIso).getTime() + 30 * DAY).toISOString();
+
   const inbox: Row[] = [
-    { id: id('30', 1), workspace_id: W, owner_user_id: U, visibility: 'private', source_type: 'scanner_doc', title: '전기요금 고지서 11월', raw_text: null, extracted_text: '한국전력공사 전기요금 청구서 납부기한 2026-11-30 청구금액 48,320원', summary_text: '11월 전기요금 48,320원, 11/30까지 납부', storage_path: 'demo/elec.pdf', file_size_bytes: 182_000, page_count: 1, processing_status: 'succeeded', triage_status: 'unprocessed', ocr_completed_at: kst(0, 8), original_expires_at: kst(30, 0), created_at: kst(0, 8) },
+    { id: id('30', 1), workspace_id: W, owner_user_id: U, visibility: 'private', source_type: 'scanner_doc', title: `전기요금 고지서 ${thisMonth}월`, raw_text: null, extracted_text: `한국전력공사 전기요금 청구서 납부기한 ${billDue.iso} 청구금액 48,320원 자동이체 미신청`, summary_text: `${thisMonth}월 전기요금 48,320원, ${billDue.m}/${billDue.d}까지 납부`, storage_path: 'demo/elec.pdf', file_size_bytes: 182_000, page_count: 1, processing_status: 'succeeded', triage_status: 'unprocessed', ocr_completed_at: kst(0, 8), original_expires_at: expiresFrom(kst(0, 8)), created_at: kst(0, 8) },
+    { id: id('30', 10), workspace_id: W, owner_user_id: U, visibility: 'private', source_type: 'scanner_doc', title: '건강검진 결과 통보서', raw_text: null, extracted_text: null, summary_text: null, storage_path: 'demo/checkup.pdf', file_size_bytes: 640_000, page_count: 2, processing_status: 'ready', triage_status: 'unprocessed', original_expires_at: expiresFrom(kst(0, 7, 50)), created_at: kst(0, 7, 50) },
     { id: id('30', 2), workspace_id: W, owner_user_id: U, visibility: 'private', source_type: 'quick_text', title: '집주인에게 계약 만료일 확인 문자', raw_text: '집주인에게 계약 만료일 확인 문자 보내기', extracted_text: null, summary_text: null, storage_path: null, file_size_bytes: 0, processing_status: 'ready', triage_status: 'unprocessed', created_at: kst(0, 7, 30) },
-    { id: id('30', 3), workspace_id: W, owner_user_id: U, visibility: 'private', source_type: 'scanner_doc', title: '의료비 영수증 - 서울치과', extracted_text: '서울치과의원 진료비 영수증 본인부담금 120,000원 2026-11-12', summary_text: '치과 진료비 120,000원 (연말정산 의료비 공제 대상)', storage_path: 'demo/dental.jpg', file_size_bytes: 420_000, page_count: 1, processing_status: 'succeeded', triage_status: 'unprocessed', created_at: kst(-1, 18) },
-    { id: id('30', 4), workspace_id: W, owner_user_id: U, visibility: 'private', source_type: 'quick_voice', title: '음성 메모: 이사업체 견적', raw_text: '이사업체 세 군데 견적 받아보기. 12월 둘째 주 토요일 기준.', audio_seconds: 14, storage_path: 'demo/voice.m4a', file_size_bytes: 90_000, processing_status: 'succeeded', triage_status: 'unprocessed', created_at: kst(-1, 12) },
+    { id: id('30', 3), workspace_id: W, owner_user_id: U, visibility: 'private', source_type: 'scanner_doc', title: '의료비 영수증 - 서울치과', extracted_text: `서울치과의원 진료비 영수증 본인부담금 120,000원 진료일 ${dentalDay.iso}`, summary_text: '치과 진료비 120,000원 (연말정산 의료비 공제 대상)', storage_path: 'demo/dental.jpg', file_size_bytes: 420_000, page_count: 1, processing_status: 'succeeded', triage_status: 'unprocessed', original_expires_at: expiresFrom(kst(-1, 18)), created_at: kst(-1, 18) },
+    { id: id('30', 4), workspace_id: W, owner_user_id: U, visibility: 'private', source_type: 'quick_voice', title: '음성 메모: 이사업체 견적', raw_text: '이사업체 세 군데 견적 받아보기. 다음 달 둘째 주 토요일 기준.', audio_seconds: 14, storage_path: 'demo/voice.m4a', file_size_bytes: 90_000, processing_status: 'succeeded', triage_status: 'unprocessed', original_expires_at: expiresFrom(kst(-1, 12)), created_at: kst(-1, 12) },
     { id: id('30', 5), workspace_id: W, owner_user_id: U, visibility: 'private', source_type: 'quick_tag', title: '세탁소 맡긴 코트 찾기', raw_text: '세탁소 맡긴 코트 찾기', processing_status: 'ready', triage_status: 'triaged', created_at: kst(-3, 9) },
-    { id: id('30', 6), workspace_id: W, owner_user_id: U, visibility: 'private', source_type: 'scanner_doc', title: '임대차 계약서 사본', extracted_text: '주택임대차계약서 임대인 홍길동 임차인 계약기간 2025-01-15 ~ 2027-01-14 보증금 ...', summary_text: '현 거주지 임대차 계약서, 2027-01-14 만료', storage_path: 'demo/lease.pdf', file_size_bytes: 1_200_000, page_count: 4, processing_status: 'succeeded', triage_status: 'triaged', created_at: kst(-8, 20) },
+    { id: id('30', 6), workspace_id: W, owner_user_id: U, visibility: 'private', source_type: 'scanner_doc', title: '임대차 계약서 사본', extracted_text: `주택임대차계약서 임대인 홍길동 임차인 계약기간 ${leaseStart.iso} ~ ${leaseEnd.iso} 보증금 5,000만원 월세 50만원`, summary_text: `현 거주지 임대차 계약서, ${leaseEnd.iso} 만료`, storage_path: 'demo/lease.pdf', file_size_bytes: 1_200_000, page_count: 4, processing_status: 'succeeded', triage_status: 'triaged', original_expires_at: expiresFrom(kst(-8, 20)), created_at: kst(-8, 20) },
     { id: id('30', 7), workspace_id: W, owner_user_id: U, visibility: 'private', source_type: 'quick_text', title: '오래된 메모', raw_text: '언젠가 읽을 책 목록 정리', processing_status: 'ready', triage_status: 'auto_folded', created_at: kst(-35, 9) },
+    { id: id('30', 11), workspace_id: W, owner_user_id: U, visibility: 'private', source_type: 'scanner_doc', title: '도시가스 요금 영수증', extracted_text: '도시가스 요금 31,200원 자동이체 출금 완료', summary_text: '도시가스 요금 31,200원 (자동이체 완료)', storage_path: 'demo/gas.pdf', file_size_bytes: 150_000, page_count: 1, processing_status: 'succeeded', triage_status: 'auto_folded', original_expires_at: expiresFrom(kst(-26, 19)), created_at: kst(-26, 19) },
+    // Older than 30 days: found only as a count on the free plan (search paywall)
+    { id: id('30', 12), workspace_id: W, owner_user_id: U, visibility: 'private', source_type: 'scanner_doc', title: '약국 영수증 - 감기약', extracted_text: '온누리약국 의약품 영수증 8,400원', summary_text: '약국 의약품 영수증 8,400원 (연말정산 의료비)', storage_path: null, original_purged_at: kst(-15, 3), file_size_bytes: 0, page_count: 1, processing_status: 'succeeded', triage_status: 'archived', created_at: kst(-45, 13) },
+    { id: id('30', 13), workspace_id: W, owner_user_id: U, visibility: 'private', source_type: 'scanner_doc', title: '안경점 영수증', extracted_text: '밝은안경 안경 구입 영수증 180,000원 시력교정용', summary_text: '안경 구입 영수증 180,000원 (연말정산 의료비 공제 가능)', storage_path: null, original_purged_at: kst(-22, 3), file_size_bytes: 0, page_count: 1, processing_status: 'succeeded', triage_status: 'archived', created_at: kst(-52, 17) },
+    { id: id('30', 14), workspace_id: W, owner_user_id: U, visibility: 'private', source_type: 'scanner_doc', title: '자동차 보험 증권', extracted_text: '자동차보험 증권 연간 보험료 684,000원 다이렉트 갱신 안내', summary_text: '자동차보험 증권, 연간 보험료 684,000원', storage_path: null, original_purged_at: kst(-40, 3), file_size_bytes: 0, page_count: 3, processing_status: 'succeeded', triage_status: 'triaged', created_at: kst(-70, 10) },
     { id: id('30', 8), workspace_id: T, owner_user_id: U, visibility: 'team', source_type: 'scanner_doc', title: '거래처 견적서 (주)한빛상사', extracted_text: '견적서 (주)한빛상사 품목 A-200 수량 500 단가 3,200원 합계 1,600,000원 유효기간 14일', summary_text: '한빛상사 A-200 500개 견적 160만원', storage_path: 'demo/quote.pdf', file_size_bytes: 300_000, page_count: 2, processing_status: 'succeeded', triage_status: 'unprocessed', created_at: kst(0, 9, 10) },
     { id: id('30', 9), workspace_id: T, owner_user_id: TEAMMATE_ID, visibility: 'team', source_type: 'quick_text', title: '캠페인 배너 시안 피드백 요청', raw_text: '배너 시안 2종 피드백 금요일까지', processing_status: 'ready', triage_status: 'unprocessed', created_at: kst(-1, 16) },
   ];
@@ -80,6 +103,7 @@ export function createSeed(): Store {
     task(8, T, '한빛상사 견적 검토', 'todo', kst(1, 12), id('20', 4)),
     task(9, T, '계약서 법무 검토 요청', 'in_progress', kst(4, 18), id('20', 4)),
     task(10, T, '배너 시안 피드백', 'todo', kst(1, 17), id('20', 5), TEAMMATE_ID),
+    task(11, W, '관리비 이체', 'todo', kst(-1, 18), null),
   ];
 
   const ev = (n: number, ws: string, title: string, s: string, e: string, opts: Partial<Row> = {}): Row => ({
@@ -110,12 +134,15 @@ export function createSeed(): Store {
     { id: id('80', 6), workspace_id: T, from_type: 'project', from_id: id('20', 4), to_type: 'record', to_id: id('70', 2), created_by: U, created_at: now },
   ];
 
-  const ym = new Date().toISOString().slice(0, 7);
-  const quotas: Row[] = [W, T].flatMap((ws) => [
-    { workspace_id: ws, period_ym: ym, usage_type: 'text_classify', limit_units: 200, reserved_units: 0, used_units: 37 },
-    { workspace_id: ws, period_ym: ym, usage_type: 'doc_ocr_pages', limit_units: 100, reserved_units: 0, used_units: 12 },
-    { workspace_id: ws, period_ym: ym, usage_type: 'voice_stt_seconds', limit_units: 1800, reserved_units: 0, used_units: 240 },
-  ]);
+  const ym = day(0).iso.slice(0, 7); // KST month, like the app's quota period
+  const quotas: Row[] = [
+    { workspace_id: W, period_ym: ym, usage_type: 'doc_ocr_pages', limit_units: 30, reserved_units: 0, used_units: 12 },
+    { workspace_id: W, period_ym: ym, usage_type: 'voice_stt_seconds', limit_units: 900, reserved_units: 0, used_units: 240 },
+    { workspace_id: W, period_ym: ym, usage_type: 'text_classify', limit_units: 100, reserved_units: 0, used_units: 37 },
+    { workspace_id: T, period_ym: ym, usage_type: 'doc_ocr_pages', limit_units: 1500, reserved_units: 0, used_units: 86 },
+    { workspace_id: T, period_ym: ym, usage_type: 'voice_stt_seconds', limit_units: 54000, reserved_units: 0, used_units: 1260 },
+    { workspace_id: T, period_ym: ym, usage_type: 'text_classify', limit_units: 5000, reserved_units: 0, used_units: 140 },
+  ];
 
   return {
     workspaces: [

@@ -48,7 +48,7 @@ export function WorkspaceSwitcher({
         value={activeWorkspaceId}
         disabled={switching}
         onChange={(e) => void handleChange(e)}
-        className="rounded-full border border-slate-200 bg-[#F7F8FA] px-3 py-1 text-xs font-medium text-slate-800 focus:border-blue-600 focus:outline-none disabled:opacity-60"
+        className="max-w-[9.5rem] truncate rounded-full border border-slate-200 bg-[#F7F8FA] px-3 py-1 text-xs font-medium text-slate-800 focus:border-blue-600 focus:outline-none disabled:opacity-60 sm:max-w-none"
       >
         {workspaces.map((ws) => (
           <option key={ws.id} value={ws.id}>

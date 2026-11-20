@@ -79,9 +79,11 @@ export default async function PricingPage({
 }) {
   const { from } = await searchParams;
   const source = from && /^[a-z_]{1,40}$/.test(from) ? from : 'pricing';
-  const contextMessage = from ? SOURCE_CONTEXT[from] : undefined;
+  const contextMessage =
+    from && Object.prototype.hasOwnProperty.call(SOURCE_CONTEXT, from) ? SOURCE_CONTEXT[from] : undefined;
 
-  const session = await getServerWorkspaceSession();
+  // Public page: render as signed-out if the auth backend is unreachable.
+  const session = await getServerWorkspaceSession().catch(() => null);
   const current: PricingCurrentWorkspace | null = session
     ? {
         workspaceId: session.activeWorkspace.id,

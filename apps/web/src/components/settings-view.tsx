@@ -322,7 +322,7 @@ export function SettingsView({
             <span>원본 스캔·음성 저장 용량</span>
             <span className="font-medium text-slate-900">
               {formatMb(workspace.storageUsedBytes)}
-              {workspace.plan === 'free' ? ' / 500.0 MB' : ' (유료 확장)'}
+              {workspace.plan === 'free' ? ' / 500.0 MB' : ' 사용 중 · 용량 제한 없음'}
             </span>
           </div>
           {workspace.plan === 'free' && (

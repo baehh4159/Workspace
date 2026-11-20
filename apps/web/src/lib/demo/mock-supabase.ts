@@ -7,11 +7,21 @@
 import crypto from 'node:crypto';
 import type { SupabaseClient, User } from '@supabase/supabase-js';
 import { DEMO_USER_ID, createSeed, type Row, type Store } from './seed';
+import { PLANS, aiQuotaLimit, type PlanId } from '@/lib/plans';
 
+/**
+ * On in development when no Supabase project is configured, or anywhere with NEXT_PUBLIC_DEMO_MODE=1.
+ * Production builds never fall back to demo mode by themselves, so a deploy with missing
+ * Supabase settings fails loudly instead of serving a login-free fake app.
+ */
 export const DEMO_MODE =
-  process.env.NEXT_PUBLIC_DEMO_MODE === '1' || !process.env.NEXT_PUBLIC_SUPABASE_URL;
+  process.env.NEXT_PUBLIC_DEMO_MODE === '1' ||
+  (!process.env.NEXT_PUBLIC_SUPABASE_URL && process.env.NODE_ENV !== 'production');
 
-const g = globalThis as unknown as { __demoStore?: Store };
+const g = globalThis as unknown as {
+  __demoStore?: Store;
+  __demoObjects?: Map<string, { bytes: Uint8Array; contentType: string }>;
+};
 function store(): Store {
   if (!g.__demoStore) g.__demoStore = createSeed();
   return g.__demoStore;
@@ -360,29 +370,102 @@ function rpc(fn: string, args: Record<string, unknown> = {}): Result {
       return { data: out, error: null };
     }
     case 'search_inbox_items': {
-      const q = String(args.p_query ?? '').toLowerCase();
-      const items = (s.inbox_items ?? [])
+      // Mirrors 0002_phase2_search_rpc.sql: free plans search the last 30 days and get a count of older hits.
+      const q = String(args.p_query ?? '').trim().toLowerCase();
+      const ws = (s.workspaces ?? []).find((w) => w.id === args.p_workspace_id);
+      if (!q || !ws) return { data: { items: [], older_match_count: 0, is_paywall_limited: false }, error: null };
+      const historyDays = PLANS[(ws.plan as PlanId) ?? 'free'].limits.searchHistoryDays;
+      const cutoff = historyDays === null ? null : new Date(Date.now() - historyDays * 86_400_000).toISOString();
+      const matches = (s.inbox_items ?? [])
         .filter((i) => i.workspace_id === args.p_workspace_id)
-        .filter((i) => [i.title, i.raw_text, i.extracted_text, i.summary_text].some((t) => String(t ?? '').toLowerCase().includes(q)))
+        .filter((i) => i.owner_user_id === DEMO_USER_ID || i.visibility === 'team')
+        .filter((i) => [i.title, i.raw_text, i.extracted_text, i.summary_text].some((t) => String(t ?? '').toLowerCase().includes(q)));
+      const recent = cutoff ? matches.filter((i) => String(i.created_at) >= cutoff) : matches;
+      const items = recent
         .sort((a, b) => cmp(b.created_at, a.created_at))
         .slice(0, Number(args.p_limit ?? 20))
         .map((i) => {
-          const text = String(i.extracted_text ?? i.raw_text ?? i.summary_text ?? '');
-          const idx = text.toLowerCase().indexOf(q);
-          const snippet = idx >= 0 ? text.slice(Math.max(0, idx - 30), idx + 60) : text.slice(0, 90);
+          const snippet = String(i.summary_text ?? i.extracted_text ?? i.raw_text ?? i.title ?? '').slice(0, 180);
           return { id: i.id, title: i.title, snippet, source_type: i.source_type, created_at: i.created_at };
         });
-      return { data: { items, next_cursor: null, older_match_count: 0, is_paywall_limited: false }, error: null };
+      return {
+        data: { items, older_match_count: matches.length - recent.length, is_paywall_limited: cutoff !== null },
+        error: null,
+      };
     }
     case 'can_access_entity':
       return { data: true, error: null };
-    case 'reserve_ai_quota':
-      return { data: { ok: true, ledger_id: crypto.randomUUID() }, error: null };
+    case 'reserve_ai_quota': {
+      // Mirrors 0001 reserve_ai_quota: creates the month row with the plan default, then reserves.
+      const ws = (s.workspaces ?? []).find((w) => w.id === args.p_workspace_id);
+      if (!ws) return { data: null, error: { message: 'WORKSPACE_NOT_FOUND' } };
+      const usageType = args.p_usage_type as 'doc_ocr_pages' | 'voice_stt_seconds' | 'text_classify';
+      const units = Number(args.p_units ?? 0);
+      let quota = (s.workspace_ai_quotas ?? []).find(
+        (q) => q.workspace_id === ws.id && q.period_ym === args.p_period_ym && q.usage_type === usageType
+      );
+      if (!quota) {
+        quota = {
+          workspace_id: ws.id,
+          period_ym: args.p_period_ym,
+          usage_type: usageType,
+          limit_units: aiQuotaLimit((ws.plan as PlanId) ?? 'free', usageType),
+          reserved_units: 0,
+          used_units: 0,
+        };
+        (s.workspace_ai_quotas ??= []).push(quota);
+      }
+      if (Number(quota.used_units) + Number(quota.reserved_units) + units > Number(quota.limit_units)) {
+        return { data: null, error: { message: 'AI_QUOTA_EXCEEDED' } };
+      }
+      quota.reserved_units = Number(quota.reserved_units) + units;
+      const ledgerId = crypto.randomUUID();
+      (s.ai_usage_ledger ??= []).push({
+        id: ledgerId,
+        workspace_id: ws.id,
+        user_id: args.p_user_id ?? DEMO_USER_ID,
+        period_ym: args.p_period_ym,
+        usage_type: usageType,
+        units,
+        status: 'reserved',
+        created_at: new Date().toISOString(),
+      });
+      return { data: ledgerId, error: null };
+    }
+    case 'finalize_ai_quota': {
+      const ledger = (s.ai_usage_ledger ?? []).find((l) => l.id === args.p_ledger_id);
+      if (!ledger || ledger.status !== 'reserved') return { data: null, error: null };
+      const quota = (s.workspace_ai_quotas ?? []).find(
+        (q) => q.workspace_id === ledger.workspace_id && q.period_ym === ledger.period_ym && q.usage_type === ledger.usage_type
+      );
+      const units = Number(ledger.units);
+      if (quota) {
+        quota.reserved_units = Math.max(0, Number(quota.reserved_units) - units);
+        if (args.p_outcome === 'committed') quota.used_units = Number(quota.used_units) + units;
+      }
+      ledger.status = args.p_outcome === 'committed' ? 'committed' : 'released';
+      return { data: true, error: null };
+    }
+    case 'add_workspace_storage_bytes': {
+      const ws = (s.workspaces ?? []).find((w) => w.id === args.p_workspace_id);
+      if (!ws) return { data: null, error: { message: 'WORKSPACE_NOT_FOUND' } };
+      const next = Number(ws.storage_used_bytes ?? 0) + Number(args.p_delta_bytes ?? 0);
+      const cap = PLANS[(ws.plan as PlanId) ?? 'free'].limits.storageBytes;
+      if (cap !== null && next > cap) return { data: null, error: { message: 'FREE_STORAGE_LIMIT_EXCEEDED' } };
+      ws.storage_used_bytes = next;
+      return { data: next, error: null };
+    }
+    case 'release_workspace_storage_bytes': {
+      const ws = (s.workspaces ?? []).find((w) => w.id === args.p_workspace_id);
+      if (ws) ws.storage_used_bytes = Math.max(0, Number(ws.storage_used_bytes ?? 0) - Number(args.p_delta_bytes ?? 0));
+      return { data: ws?.storage_used_bytes ?? 0, error: null };
+    }
     case 'create_team_workspace_atomic': {
       const id = crypto.randomUUID();
-      s.workspaces.push({ id, name: String(args.p_name ?? '새 팀'), type: 'team', plan: 'team', max_seats: 10, storage_used_bytes: 0, created_at: new Date().toISOString() });
+      const name = String(args.p_name ?? '새 팀');
+      s.workspaces.push({ id, name, type: 'team', plan: 'free', max_seats: 10, storage_used_bytes: 0, created_at: new Date().toISOString() });
       s.workspace_members.push({ workspace_id: id, user_id: DEMO_USER_ID, role: 'owner', status: 'active', joined_at: new Date().toISOString() });
-      return { data: [{ id, name: String(args.p_name ?? '새 팀'), type: 'team', plan: 'free', max_seats: 10 }], error: null };
+      return { data: [{ id, name, type: 'team', plan: 'free', max_seats: 10 }], error: null };
     }
     case 'transfer_personal_items_to_team':
       return { data: { transferred_count: 0 }, error: null };
@@ -392,24 +475,65 @@ function rpc(fn: string, args: Record<string, unknown> = {}): Result {
 }
 
 // ---------- Storage emulation ----------
-const PLACEHOLDER_SVG =
-  'data:image/svg+xml;utf8,' +
-  encodeURIComponent(
-    '<svg xmlns="http://www.w3.org/2000/svg" width="600" height="800"><rect width="100%" height="100%" fill="#f1f5f9"/><text x="50%" y="50%" text-anchor="middle" font-family="sans-serif" font-size="28" fill="#64748b">데모 문서 미리보기</text></svg>'
-  );
+// Uploaded files are kept in server memory (newest 30, max 20 MB each) and served by /api/demo-upload.
+const MAX_DEMO_OBJECT_BYTES = 20 * 1024 * 1024;
+const MAX_DEMO_OBJECTS = 30;
+
+function demoObjects() {
+  if (!g.__demoObjects) g.__demoObjects = new Map();
+  return g.__demoObjects;
+}
+
+export function demoObjectUrl(path: string): string {
+  return `/api/demo-upload?path=${encodeURIComponent(path)}`;
+}
+
+export function putDemoObject(path: string, bytes: Uint8Array, contentType: string): 'ok' | 'too_large' {
+  if (bytes.byteLength > MAX_DEMO_OBJECT_BYTES) return 'too_large';
+  const objects = demoObjects();
+  objects.delete(path);
+  objects.set(path, { bytes, contentType });
+  while (objects.size > MAX_DEMO_OBJECTS) {
+    const oldest = objects.keys().next().value;
+    if (oldest === undefined) break;
+    objects.delete(oldest);
+  }
+  return 'ok';
+}
+
+export function getDemoObject(path: string): { bytes: Uint8Array; contentType: string } | null {
+  return demoObjects().get(path) ?? null;
+}
 
 function storageBucket() {
   return {
-    createSignedUrl: async () => ({ data: { signedUrl: PLACEHOLDER_SVG }, error: null }),
-    createSignedUrls: async (paths: string[]) => ({ data: paths.map((p) => ({ path: p, signedUrl: PLACEHOLDER_SVG })), error: null }),
-    createSignedUploadUrl: async (path: string) => ({
-      data: { signedUrl: '/api/demo-upload', token: 'demo', path },
+    createSignedUrl: async (path: string) => ({ data: { signedUrl: demoObjectUrl(path) }, error: null }),
+    createSignedUrls: async (paths: string[]) => ({
+      data: paths.map((p) => ({ path: p, signedUrl: demoObjectUrl(p) })),
       error: null,
     }),
+    createSignedUploadUrl: async (path: string) => ({
+      data: { signedUrl: demoObjectUrl(path), token: 'demo', path },
+      error: null,
+    }),
+    list: async (folder: string, opts?: { search?: string }) => {
+      const prefix = `${folder}/`;
+      const data = [...demoObjects().entries()]
+        .filter(([p]) => p.startsWith(prefix) && !p.slice(prefix.length).includes('/'))
+        .map(([p, obj]) => ({ name: p.slice(prefix.length), metadata: { size: obj.bytes.byteLength, mimetype: obj.contentType } }))
+        .filter((o) => !opts?.search || o.name.includes(opts.search));
+      return { data, error: null };
+    },
     upload: async (path: string) => ({ data: { path }, error: null }),
     uploadToSignedUrl: async (path: string) => ({ data: { path }, error: null }),
-    remove: async () => ({ data: [], error: null }),
-    download: async () => ({ data: new Blob(['demo']), error: null }),
+    remove: async (paths: string[]) => {
+      for (const p of paths ?? []) demoObjects().delete(p);
+      return { data: [], error: null };
+    },
+    download: async (path: string) => {
+      const obj = getDemoObject(path);
+      return { data: obj ? new Blob([obj.bytes as BlobPart], { type: obj.contentType }) : null, error: obj ? null : { message: 'Object not found' } };
+    },
   };
 }
 

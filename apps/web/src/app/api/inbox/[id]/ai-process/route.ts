@@ -8,6 +8,8 @@
 import { NextResponse } from 'next/server';
 import { UuidSchema } from '@workspace/core/schemas';
 import { processInboxItemWithAi, resolveAiMetering } from '@workspace/ai/worker';
+import { DEMO_MODE } from '@/lib/demo/mock-supabase';
+import { simulateAiProcessing } from '@/lib/demo/ai-simulator';
 import {
   assertActiveWorkspaceMember,
   getAuthenticatedContext,
@@ -42,7 +44,7 @@ export async function POST(
   const { data: item } = await ctx.adminClient
     .from('inbox_items')
     .select(
-      'id, workspace_id, owner_user_id, visibility, source_type, raw_text, storage_path, original_purged_at, page_count, audio_seconds, processing_status'
+      'id, workspace_id, owner_user_id, visibility, source_type, title, raw_text, storage_path, original_purged_at, page_count, audio_seconds, processing_status'
     )
     .eq('id', id)
     .maybeSingle();
@@ -130,14 +132,17 @@ export async function POST(
       signedFileUrl = signed.signedUrl;
     }
 
-    const result = await processInboxItemWithAi({
+    const job = {
       itemId: item.id,
       sourceType: item.source_type,
       signedFileUrl,
       rawText: item.raw_text,
       pageCount: item.page_count,
       audioSeconds: item.audio_seconds,
-    });
+    };
+    const result = DEMO_MODE
+      ? await simulateAiProcessing({ ...job, title: (item.title as string | null) ?? null })
+      : await processInboxItemWithAi(job);
 
     if (result.actualUnits > units) {
       console.warn('[AI_METERING_DISCREPANCY]', {

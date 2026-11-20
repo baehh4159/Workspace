@@ -5,7 +5,11 @@
  * Client Shell wiring InboxView to triage, signed-url, visibility PATCH, and DELETE /api/inbox/[id].
  */
 import React, { useCallback, useState } from 'react';
+import Link from 'next/link';
 import { useRouter } from 'next/navigation';
+import { InboxUploadZone } from '@/components/inbox-upload-zone';
+import { describeAiError, runAiProcessing } from '@/lib/upload-client';
+import { pricingHref } from '@/lib/plans';
 import {
   InboxView,
   type InboxCardItem,
@@ -13,7 +17,7 @@ import {
 } from '@/components/inbox-view';
 
 type TriagePayload =
-  | { action: 'convert_to_task'; taskTitle: string }
+  | { action: 'convert_to_task'; taskTitle: string; taskDueAt?: string }
   | { action: 'link_to_project'; projectId: string }
   | { action: 'archive' };
 
@@ -28,6 +32,22 @@ export function InboxClientShell({
 }) {
   const router = useRouter();
   const [actionError, setActionError] = useState<string | null>(null);
+  const [upsell, setUpsell] = useState<'ai_quota' | 'storage' | null>(null);
+
+  const refresh = useCallback(() => router.refresh(), [router]);
+
+  const handleRunAi = useCallback(
+    async (itemId: string) => {
+      setActionError(null);
+      const result = await runAiProcessing(itemId);
+      if (!result.ok) {
+        if (result.code === 'AI_QUOTA_EXCEEDED') setUpsell('ai_quota');
+        else setActionError(describeAiError(result.code));
+      }
+      router.refresh();
+    },
+    [router]
+  );
 
   const handleTriage = useCallback(
     async (itemId: string, payload: TriagePayload) => {
@@ -104,6 +124,28 @@ export function InboxClientShell({
 
   return (
     <div>
+      <InboxUploadZone workspaceId={workspaceId} onUploaded={refresh} onUpsell={setUpsell} />
+
+      {upsell && (
+        <div className="mx-auto max-w-3xl px-4 pt-3 sm:px-6">
+          <div className="flex flex-wrap items-center justify-between gap-2 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-xs text-amber-900">
+            <span>
+              {upsell === 'ai_quota'
+                ? '이번 달 무료 AI 한도를 모두 썼습니다. 올린 문서는 그대로 저장되고, 다음 달 1일에 한도가 다시 채워집니다.'
+                : '무료 저장 용량(500MB)이 가득 차 새 파일을 올릴 수 없습니다.'}
+            </span>
+            <span className="flex items-center gap-3">
+              <Link href={pricingHref(upsell)} className="font-semibold underline underline-offset-2">
+                {upsell === 'ai_quota' ? '한도 늘리기 →' : '용량 제한 없애기 →'}
+              </Link>
+              <button type="button" onClick={() => setUpsell(null)} className="text-amber-700 hover:text-amber-950" aria-label="안내 닫기">
+                ✕
+              </button>
+            </span>
+          </div>
+        </div>
+      )}
+
       {actionError && (
         <div className="mx-auto max-w-4xl px-4 pt-4 sm:px-6">
           <div className="rounded-lg border border-red-200 bg-red-50 px-3.5 py-2.5 text-xs text-red-700">
@@ -120,6 +162,7 @@ export function InboxClientShell({
         }}
         onToggleVisibility={handleToggleVisibility}
         onDeleteItem={handleDeleteItem}
+        onRunAi={handleRunAi}
       />
     </div>
   );
