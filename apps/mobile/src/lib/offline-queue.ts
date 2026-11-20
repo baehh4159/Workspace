@@ -55,6 +55,16 @@ export type OfflineQueueItem =
       enqueuedAt: string;
     };
 
+/**
+ * A queue item before it is stamped with enqueuedAt.
+ * (Plain Omit<Union, K> would collapse the union to its shared fields and lose localUri/fileName/etc.)
+ */
+export type NewOfflineQueueItem = OfflineQueueItem extends infer T
+  ? T extends OfflineQueueItem
+    ? Omit<T, 'enqueuedAt'>
+    : never
+  : never;
+
 type QueueListener = (count: number) => void;
 const listeners = new Set<QueueListener>();
 let flushing = false;
@@ -90,7 +100,7 @@ async function persistLocalFile(srcUri: string, idempotencyKey: string, fileName
 }
 
 export async function enqueueOfflineItem(
-  item: Omit<OfflineQueueItem, 'enqueuedAt'>
+  item: NewOfflineQueueItem
 ): Promise<void> {
   const queue = await readQueue();
   if (queue.some((q) => q.idempotencyKey === item.idempotencyKey)) {

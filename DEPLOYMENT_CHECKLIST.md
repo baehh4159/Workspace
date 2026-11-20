@@ -13,6 +13,7 @@
    - `0006_phase6_push_tokens.sql`
    - `0007_phase7_team_transfer.sql`
    - `0008_phase8_upgrade_intents.sql`
+   - `0009_phase9_task_reminders.sql`
 2. **Private Storage 버킷 생성**:
    - 버킷 이름: `inbox-originals` (반드시 **Private** — Public 체크 해제)
 3. **Auth → URL Configuration / Providers**:

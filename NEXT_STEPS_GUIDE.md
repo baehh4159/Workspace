@@ -33,6 +33,7 @@ Google Drive에서 `universal-workspace` 폴더를 로컬 PC로 내려받았다�
    6. `0006_phase6_push_tokens.sql`
    7. `0007_phase7_team_transfer.sql`
    8. `0008_phase8_upgrade_intents.sql` (요금제 업그레이드 사전 신청 기록)
+   9. `0009_phase9_task_reminders.sql` (마감 알림 중복 방지 기록)
 3. **Storage 버킷 생성**: 좌측 **Storage → New bucket**에서 이름이 `inbox-originals`인 버킷을 만듭니다.
    - ⚠️ **주의**: **Public bucket 체크를 반드시 해제(Private)** 해야 합니다.
 4. **OAuth 로그인 설정**: 좌측 **Authentication → Providers**에서 **Google**과 **Kakao**를 활성화하고, **Authentication → URL Configuration → Redirect URLs**에 아래 3개 주소를 모두 등록합니다.
@@ -101,6 +102,7 @@ pnpm --filter mobile start
 3. **유지보수 크론 등록**: Vercel Cron 또는 외부 크론 서비스에서 5~10분 주기로 아래 요청을 보내도록 설정합니다.
    - URL: `POST https://<실제-배포-도메인>/api/cron/maintenance`
    - Header: `Authorization: Bearer <CRON_SECRET>`
+   - 이 요청 한 번으로 AI 잠금 복구, 7일 자동 접기, 원본 만료 알림·정리, **마감 알림 푸시**(마감 24시간 전 한 번, 마감이 지났을 때 한 번)가 모두 실행됩니다. 마감 알림은 밤 10시~아침 8시(한국 시간)에는 보내지 않고 아침 8시에 몰아서 보냅니다.
 
 ---
 

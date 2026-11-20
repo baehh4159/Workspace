@@ -168,6 +168,8 @@ export function createSeed(): Store {
     share_tokens: [],
     workspace_ai_quotas: quotas,
     ai_usage_ledger: [],
-    user_push_tokens: [{ id: id('90', 1), user_id: U, platform: 'ios', last_seen_at: kst(-1, 9) }],
+    user_push_tokens: [
+      { id: id('90', 1), user_id: U, expo_push_token: 'ExponentPushToken[demo-iphone]', platform: 'ios', device_name: 'iPhone', last_seen_at: kst(-1, 9) },
+    ],
   };
 }

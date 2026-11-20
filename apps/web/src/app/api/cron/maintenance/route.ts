@@ -4,12 +4,18 @@
  *  - ?job=zombie   -> Recover >5m stale reserved AI quotas & processing inbox items
  *  - ?job=autofold -> Auto-fold >7d unprocessed inbox items into auto_folded
  *  - ?job=purge    -> Dispatch 7d/1d pre-expiry warnings ONLY for free-plan workspaces
- *                     (marks notified_at ONLY after dispatch succeeds) & purge expired free originals
+ *                     (push + optional webhook; marks notified_at ONLY after dispatch succeeds)
+ *                     & purge expired free originals
+ *  - ?job=reminders -> "오늘/내일 마감" and "마감이 지났어요" pushes, once per task per stage
+ *                     (skipped 22:00–08:00 KST; see lib/reminder-job.ts)
  *  - Returns HTTP 500 if any requested job encounters an error so cron monitors alert immediately.
  */
 import crypto from 'node:crypto';
 import { NextResponse } from 'next/server';
+import type { SupabaseClient } from '@supabase/supabase-js';
 import { createAdminClient, PRIVATE_STORAGE_BUCKET } from '@/lib/supabase-server';
+import { pushToUser, runDeadlineReminders } from '@/lib/reminder-job';
+import { DEMO_MODE } from '@/lib/demo/mock-supabase';
 
 const NO_STORE_HEADERS = { 'Cache-Control': 'no-store' };
 
@@ -31,20 +37,30 @@ function isAuthorizedCron(req: Request): { ok: true } | { ok: false; status: num
 }
 
 /**
- * Notification dispatcher hook (push/email webhook).
- * Returns true only when delivery succeeds so notified_at is never stamped prematurely.
+ * Notification dispatcher (push to the owner's devices + optional webhook for email etc.).
+ * Returns true only when every configured channel succeeded so notified_at is never stamped prematurely.
  */
-async function dispatchExpiryWarning(params: {
-  inboxItemId: string;
-  ownerUserId: string;
-  title: string | null;
-  expiresAt: string;
-  daysRemaining: 7 | 1;
-}): Promise<boolean> {
+async function dispatchExpiryWarning(
+  adminClient: SupabaseClient,
+  params: {
+    inboxItemId: string;
+    ownerUserId: string;
+    title: string | null;
+    expiresAt: string;
+    daysRemaining: 7 | 1;
+  }
+): Promise<boolean> {
+  const push = await pushToUser(adminClient, params.ownerUserId, {
+    title: params.daysRemaining === 1 ? '내일 원본 파일이 정리됩니다' : '원본 파일이 7일 뒤 정리됩니다',
+    body: `${params.title ?? '스캔 문서'} · 지금 내려받거나 프로 플랜으로 계속 보관할 수 있어요`,
+    data: { type: 'original_expiry', inboxItemId: params.inboxItemId },
+  });
+  if (push === 'failed') return false;
+
   const webhookUrl = process.env.NOTIFICATION_WEBHOOK_URL;
   if (!webhookUrl) {
-    // Dev/staging fallback: log structured event; in production configure NOTIFICATION_WEBHOOK_URL
-    console.info('[EXPIRY_WARNING_DRY_RUN]', params);
+    // No webhook configured: push (or nothing, for users without the app) is the only channel.
+    console.info('[EXPIRY_WARNING]', { ...params, push });
     return true;
   }
 
@@ -72,7 +88,7 @@ export async function POST(req: Request) {
 
   const { searchParams } = new URL(req.url);
   const job = searchParams.get('job') ?? 'all';
-  if (!['all', 'zombie', 'autofold', 'purge'].includes(job)) {
+  if (!['all', 'zombie', 'autofold', 'purge', 'reminders'].includes(job)) {
     return NextResponse.json({ error: 'INVALID_JOB_PARAM' }, { status: 400, headers: NO_STORE_HEADERS });
   }
 
@@ -137,7 +153,7 @@ export async function POST(req: Request) {
       console.error('[CRON_WARN_7D_QUERY_FAILED]', err7d.message);
     } else {
       for (const row of candidates7d ?? []) {
-        const sent = await dispatchExpiryWarning({
+        const sent = await dispatchExpiryWarning(adminClient, {
           inboxItemId: row.id,
           ownerUserId: row.owner_user_id,
           title: row.title,
@@ -180,7 +196,7 @@ export async function POST(req: Request) {
       console.error('[CRON_WARN_1D_QUERY_FAILED]', err1d.message);
     } else {
       for (const row of candidates1d ?? []) {
-        const sent = await dispatchExpiryWarning({
+        const sent = await dispatchExpiryWarning(adminClient, {
           inboxItemId: row.id,
           ownerUserId: row.owner_user_id,
           title: row.title,
@@ -267,6 +283,19 @@ export async function POST(req: Request) {
         purgeFailedCount,
       };
     }
+  }
+
+  // 4) Deadline reminders (push)
+  if (job === 'all' || job === 'reminders') {
+    // Demo only: ?now=<ISO> simulates another time of day (quiet hours depend on the clock).
+    const nowParam = searchParams.get('now');
+    const simulatedNow = DEMO_MODE && nowParam && !Number.isNaN(Date.parse(nowParam)) ? new Date(nowParam) : undefined;
+    const reminders = await runDeadlineReminders(adminClient, simulatedNow);
+    if (!reminders.ok) {
+      hasFailure = true;
+      console.error('[CRON_REMINDERS_FAILED]', reminders);
+    }
+    report.reminders = reminders;
   }
 
   return NextResponse.json(report, {
