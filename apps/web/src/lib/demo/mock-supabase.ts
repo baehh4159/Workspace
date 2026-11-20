@@ -382,7 +382,7 @@ function rpc(fn: string, args: Record<string, unknown> = {}): Result {
       const id = crypto.randomUUID();
       s.workspaces.push({ id, name: String(args.p_name ?? '새 팀'), type: 'team', plan: 'team', max_seats: 10, storage_used_bytes: 0, created_at: new Date().toISOString() });
       s.workspace_members.push({ workspace_id: id, user_id: DEMO_USER_ID, role: 'owner', status: 'active', joined_at: new Date().toISOString() });
-      return { data: id, error: null };
+      return { data: [{ id, name: String(args.p_name ?? '새 팀'), type: 'team', plan: 'free', max_seats: 10 }], error: null };
     }
     case 'transfer_personal_items_to_team':
       return { data: { transferred_count: 0 }, error: null };

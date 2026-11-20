@@ -1,10 +1,17 @@
 import type { Metadata } from 'next';
 import React from 'react';
 import './globals.css';
+import { BRAND } from '@/lib/brand';
 
 export const metadata: Metadata = {
-  title: 'Workspace — 스캔부터 실행까지',
-  description: '개인 및 소규모 팀을 위한 스캔 문서·빠른 기록·할 일·일정 통합 워크스페이스',
+  title: `${BRAND.name} — ${BRAND.tagline}`,
+  description: BRAND.description,
+  openGraph: {
+    title: `${BRAND.name} — ${BRAND.tagline}`,
+    description: BRAND.description,
+    locale: 'ko_KR',
+    type: 'website',
+  },
 };
 
 export default function RootLayout({

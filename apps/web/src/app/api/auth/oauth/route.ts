@@ -46,7 +46,7 @@ export async function GET(req: Request) {
       getAll() {
         return cookieStore.getAll();
       },
-      setAll(list) {
+      setAll(list: Array<{ name: string; value: string; options: CookieOptions }>) {
         cookiesToSet.push(...list);
       },
     },

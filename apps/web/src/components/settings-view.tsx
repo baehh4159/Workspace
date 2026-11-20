@@ -6,7 +6,9 @@
  *  - Right-click / ⋯ menu: 연결된 원본 항목 열기, 공유 링크 즉시 회수 (no raw URL re-copy per token_hash security)
  */
 import React, { useEffect, useState } from 'react';
+import Link from 'next/link';
 import { useRouter } from 'next/navigation';
+import { FREE_TEAM_MAX_SEATS, PLANS, planName, pricingHref } from '@/lib/plans';
 import { ContextMenuWrapper, type ContextMenuItem } from '@/components/context-menu';
 
 export interface AiQuotaRow {
@@ -45,7 +47,8 @@ const ENTITY_LABEL: Record<ActiveShareItem['entityType'], string> = {
   task: '할 일',
 };
 
-const FREE_STORAGE_LIMIT_BYTES = 500 * 1024 * 1024;
+const FREE_STORAGE_LIMIT_BYTES = PLANS.free.limits.storageBytes ?? 500 * 1024 * 1024;
+const NEAR_LIMIT_PCT = 80;
 
 function formatMb(bytes: number): string {
   return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
@@ -252,7 +255,7 @@ export function SettingsView({
         <h1 className="text-lg font-bold tracking-tight text-slate-900">워크스페이스 설정</h1>
         <p className="mt-0.5 text-xs text-slate-500">
           {workspace.name} · {workspace.type === 'team' ? '팀 워크스페이스' : '개인 워크스페이스'} ·{' '}
-          <strong className="font-semibold uppercase text-slate-700">{workspace.plan}</strong> 플랜
+          <strong className="font-semibold text-slate-700">{planName(workspace.plan)}</strong> 플랜
         </p>
       </header>
 
@@ -269,12 +272,50 @@ export function SettingsView({
       )}
 
       <section className="rounded-xl border border-slate-200 bg-white p-5 space-y-4">
-        <div className="flex items-center justify-between">
-          <h2 className="text-sm font-semibold text-slate-900">플랜 · 좌석 · 저장 용량</h2>
-          <span className="rounded-full bg-slate-100 px-2.5 py-0.5 text-xs font-medium text-slate-700">
-            좌석 {activeMemberCount} / {workspace.maxSeats}명
-          </span>
+        <div className="flex flex-wrap items-start justify-between gap-3">
+          <div>
+            <h2 className="text-sm font-semibold text-slate-900">
+              {planName(workspace.plan)} 플랜
+              {workspace.plan === 'free' ? ' 이용 중' : ' 이용 중 · 원본 영구 보관 · 전체 기간 검색'}
+            </h2>
+            <p className="mt-0.5 text-xs text-slate-500">
+              {workspace.plan === 'free'
+                ? workspace.type === 'team'
+                  ? '팀 플랜: 팀원 최대 10명 · 원본 영구 보관 · 전체 기간 검색 · AI 한도 50배'
+                  : '프로 플랜: 원본 영구 보관 · 전체 기간 검색 · 월 AI 문서 읽기 500쪽'
+                : '플랜 변경과 결제 내역은 요금제 페이지에서 확인할 수 있습니다.'}
+            </p>
+          </div>
+          <div className="flex items-center gap-2">
+            <span className="rounded-full bg-slate-100 px-2.5 py-0.5 text-xs font-medium text-slate-700">
+              좌석 {activeMemberCount} / {workspace.maxSeats}명
+            </span>
+            {workspace.plan === 'free' ? (
+              <Link
+                href={pricingHref('settings')}
+                className="rounded-lg bg-blue-700 px-3.5 py-1.5 text-xs font-semibold text-white hover:bg-blue-800"
+              >
+                {workspace.type === 'team' ? '팀 플랜 보기' : '프로로 업그레이드'}
+              </Link>
+            ) : (
+              <Link
+                href={pricingHref('settings')}
+                className="rounded-lg border border-slate-200 bg-white px-3.5 py-1.5 text-xs font-medium text-slate-700 hover:bg-slate-50"
+              >
+                요금제 보기
+              </Link>
+            )}
+          </div>
         </div>
+
+        {workspace.type === 'team' && workspace.plan === 'free' && activeMemberCount >= workspace.maxSeats && (
+          <p className="rounded-lg border border-amber-200 bg-amber-50 px-3.5 py-2.5 text-xs text-amber-900">
+            무료 팀 좌석({workspace.maxSeats}명)이 모두 찼습니다. 새 팀원은 공유 링크로 합류할 수 없습니다.{' '}
+            <Link href={pricingHref('team_seats')} className="font-semibold underline underline-offset-2">
+              팀 플랜으로 10명까지 늘리기
+            </Link>
+          </p>
+        )}
 
         <div className="space-y-1.5">
           <div className="flex items-center justify-between text-xs text-slate-600">
@@ -294,17 +335,26 @@ export function SettingsView({
           )}
           <p className="text-[11px] text-slate-500">
             {workspace.plan === 'free'
-              ? '무료 플랜은 원본 파일을 30일 보관하며(만료 7일·1일 전 알림), 처리 실패한 원본은 자동 삭제되지 않습니다.'
-              : '유료 플랜은 사용자 확인(user_confirmed_at) 전까지 원본 파일을 자동 삭제하지 않습니다.'}
+              ? '무료 플랜은 원본 파일(PDF·사진·음성)을 30일 동안 보관합니다. 본문·요약·할 일은 계속 남고, 만료 7일 전부터 입력함에서 원본을 내려받을 수 있습니다.'
+              : '원본 파일은 직접 삭제하기 전까지 자동으로 지워지지 않습니다.'}
           </p>
+          {workspace.plan === 'free' && storagePct >= NEAR_LIMIT_PCT && (
+            <p className="text-[11px] font-medium text-amber-800">
+              저장 용량이 {storagePct}% 찼습니다. 가득 차면 새 스캔·음성을 올릴 수 없습니다.{' '}
+              <Link href={pricingHref('storage')} className="underline underline-offset-2">
+                용량 제한 없애기
+              </Link>
+            </p>
+          )}
         </div>
       </section>
 
-      <section className="rounded-xl border border-slate-200 bg-white p-5 space-y-3">
+      <section id="create-team" className="scroll-mt-20 rounded-xl border border-slate-200 bg-white p-5 space-y-3">
         <div>
           <h2 className="text-sm font-semibold text-slate-900">새 팀 워크스페이스 만들기</h2>
           <p className="text-xs text-slate-500">
-            개인 워크스페이스는 그대로 유지되며, 최대 10명이 함께 쓰는 별도 팀 공간이 생성됩니다.
+            개인 워크스페이스는 그대로 유지되며, 별도 팀 공간이 생성됩니다. 무료 팀은 {FREE_TEAM_MAX_SEATS}명까지,
+            팀 플랜은 최대 10명까지 함께 쓸 수 있습니다.
           </p>
         </div>
 
@@ -397,10 +447,20 @@ export function SettingsView({
       <section className="rounded-xl border border-slate-200 bg-white p-5 space-y-3.5">
         <div className="flex items-center justify-between">
           <h2 className="text-sm font-semibold text-slate-900">월간 AI 처리 한도 ({periodYm})</h2>
-          <span className="text-[11px] text-slate-500">Zero Data Retention 적용</span>
+          <span className="text-[11px] text-slate-500">매월 1일 초기화</span>
         </div>
 
         <div className="space-y-3">
+          {aiQuotas.some(
+            (q) => q.limitUnits > 0 && ((q.usedUnits + q.reservedUnits) / q.limitUnits) * 100 >= NEAR_LIMIT_PCT
+          ) && workspace.plan === 'free' && (
+            <p className="rounded-lg border border-amber-200 bg-amber-50 px-3.5 py-2.5 text-xs text-amber-900">
+              이번 달 AI 한도가 얼마 남지 않았습니다. 한도를 다 쓰면 새 문서를 AI로 읽을 수 없습니다.{' '}
+              <Link href={pricingHref('ai_quota')} className="font-semibold underline underline-offset-2">
+                한도 늘리기
+              </Link>
+            </p>
+          )}
           {aiQuotas.map((q) => {
             const consumed = q.usedUnits + q.reservedUnits;
             const pct = q.limitUnits > 0 ? Math.min(100, Math.round((consumed / q.limitUnits) * 100)) : 0;

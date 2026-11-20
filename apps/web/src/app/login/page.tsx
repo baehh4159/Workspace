@@ -4,7 +4,9 @@
  */
 import React from 'react';
 import { redirect } from 'next/navigation';
+import Link from 'next/link';
 import { getServerWorkspaceSession } from '@/lib/supabase-server';
+import { BRAND } from '@/lib/brand';
 
 export const dynamic = 'force-dynamic';
 
@@ -42,11 +44,11 @@ export default async function LoginPage({
     <div className="flex min-h-screen items-center justify-center bg-[#F7F8FA] px-4 py-12 text-slate-900">
       <div className="w-full max-w-sm rounded-2xl border border-slate-200 bg-white p-7 shadow-sm">
         <div className="space-y-1.5 text-center">
-          <p className="text-xs font-semibold uppercase tracking-wider text-blue-700">
-            Workspace
-          </p>
+          <Link href="/" className="text-xs font-semibold uppercase tracking-wider text-blue-700 hover:underline">
+            {BRAND.name}
+          </Link>
           <h1 className="text-xl font-bold tracking-tight text-slate-900">
-            스캔부터 실행까지 한 곳에서
+            {BRAND.tagline}
           </h1>
           <p className="text-xs leading-relaxed text-slate-500">
             가입 즉시 개인 워크스페이스가 자동 생성됩니다.
@@ -102,6 +104,11 @@ export default async function LoginPage({
 
         <p className="mt-6 text-center text-[11px] leading-relaxed text-slate-400">
           팀 공유 링크로 초대받으셨다면 공유받은 링크에서 바로 합류하실 수도 있습니다.
+        </p>
+        <p className="mt-3 text-center text-[11px] text-slate-400">
+          <Link href="/pricing" className="hover:text-slate-600 hover:underline">
+            요금제 보기
+          </Link>
         </p>
       </div>
     </div>

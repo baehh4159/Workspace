@@ -1,6 +1,7 @@
 /**
  * apps/web/src/app/api/workspaces/route.ts
- * POST: Creates a new team workspace (max 10 seats) with default tags and switches active workspace cookie.
+ * POST: Creates a new team workspace with default tags and switches active workspace cookie.
+ * New teams start on the free plan with FREE_TEAM_MAX_SEATS seats; the team plan raises it to 10.
  */
 import { NextResponse } from 'next/server';
 import { z } from 'zod';
@@ -8,6 +9,7 @@ import {
   ACTIVE_WORKSPACE_COOKIE,
   getAuthenticatedContext,
 } from '@/lib/supabase-server';
+import { FREE_TEAM_MAX_SEATS } from '@/lib/billing';
 
 const CreateTeamWorkspaceSchema = z.object({
   name: z.string().trim().min(1).max(80),
@@ -46,6 +48,16 @@ export async function POST(req: Request) {
   const workspace = Array.isArray(data) ? data[0] : data;
   if (!workspace?.id) {
     return NextResponse.json({ error: 'TEAM_WORKSPACE_CREATE_FAILED' }, { status: 500 });
+  }
+
+  // Free teams get a small seat cap so growing teams have a reason to upgrade.
+  const { error: seatErr } = await ctx.adminClient
+    .from('workspaces')
+    .update({ max_seats: FREE_TEAM_MAX_SEATS })
+    .eq('id', workspace.id as string)
+    .eq('plan', 'free');
+  if (!seatErr && workspace.plan === 'free') {
+    workspace.max_seats = FREE_TEAM_MAX_SEATS;
   }
 
   const res = NextResponse.json({ workspace }, { status: 201 });

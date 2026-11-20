@@ -12,6 +12,7 @@ import {
   type AiQuotaRow,
   type TransferableItem,
 } from '@/components/settings-view';
+import { aiQuotaLimit } from '@/lib/plans';
 
 export const dynamic = 'force-dynamic';
 
@@ -26,25 +27,10 @@ function getCurrentKstYm(now = new Date()): string {
   return `${year}-${month}`;
 }
 
-const AI_QUOTA_META: Record<
-  AiQuotaRow['usageType'],
-  { label: string; unitLabel: string; limits: Record<'free' | 'pro' | 'team', number> }
-> = {
-  doc_ocr_pages: {
-    label: '문서 OCR',
-    unitLabel: '페이지',
-    limits: { free: 30, pro: 500, team: 1500 },
-  },
-  voice_stt_seconds: {
-    label: '음성 받아쓰기(STT)',
-    unitLabel: '초',
-    limits: { free: 900, pro: 18000, team: 54000 },
-  },
-  text_classify: {
-    label: '텍스트 자동 분류',
-    unitLabel: '회',
-    limits: { free: 100, pro: 2000, team: 5000 },
-  },
+const AI_QUOTA_META: Record<AiQuotaRow['usageType'], { label: string; unitLabel: string }> = {
+  doc_ocr_pages: { label: 'AI 문서 읽기', unitLabel: '쪽' },
+  voice_stt_seconds: { label: '음성 받아쓰기', unitLabel: '초' },
+  text_classify: { label: '메모 자동 분류', unitLabel: '회' },
 };
 
 export default async function SettingsPage() {
@@ -129,7 +115,7 @@ export default async function SettingsPage() {
       label: meta.label,
       usedUnits: row?.used ?? 0,
       reservedUnits: row?.reserved ?? 0,
-      limitUnits: row?.limit ?? meta.limits[activePlan],
+      limitUnits: row?.limit ?? aiQuotaLimit(activePlan, usageType),
       unitLabel: meta.unitLabel,
     };
   });
