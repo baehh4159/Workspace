@@ -15,6 +15,7 @@ const NAV_ITEMS = [
   { href: '/projects', label: '프로젝트' },
   { href: '/calendar', label: '일정' },
   { href: '/search', label: '검색' },
+  { href: '/tax', label: '연말정산' },
   { href: '/settings', label: '설정' },
 ] as const;
 

@@ -90,7 +90,7 @@ export const PLANS: Record<PlanId, PlanDefinition> = {
     highlight: true,
     features: [
       '무료 플랜의 모든 기능',
-      '원본 파일 영구 보관 (자동 삭제 없음)',
+      '원본 파일 영구 보관 (자동 삭제 없음) — 연말정산 영수증도 1년 내내',
       '전체 기간 본문 검색',
       '월 AI 문서 읽기 500쪽 · 음성 받아쓰기 300분',
       '저장 용량 500MB 제한 해제',
