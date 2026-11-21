@@ -7,6 +7,6 @@
     "build": "pnpm --filter web build",
     "start": "pnpm --filter web start",
     "typecheck": "pnpm --filter web typecheck",
-    "test": "pnpm --filter web test && pnpm --filter @workspace/ai test"
+    "test": "pnpm --filter web test && pnpm --filter @workspace/core test && pnpm --filter @workspace/ai test"
   }
 }

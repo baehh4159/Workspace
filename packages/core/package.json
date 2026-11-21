@@ -4,9 +4,13 @@
   "private": true,
   "exports": {
     ".": "./schemas/index.ts",
-    "./schemas": "./schemas/index.ts"
+    "./schemas": "./schemas/index.ts",
+    "./deadline": "./deadline.ts"
   },
   "dependencies": {
     "zod": "^3.24.2"
+  },
+  "scripts": {
+    "test": "node --experimental-strip-types --no-warnings --test *.test.mts"
   }
 }

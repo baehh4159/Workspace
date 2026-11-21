@@ -151,7 +151,7 @@ export async function uploadAndIngestFile(params: {
     throw new ApiHttpError(putRes.status, `STORAGE_PUT_FAILED_${putRes.status}`);
   }
 
-  return authedJsonFetch<{ item: { id: string; title: string | null } }>('/api/inbox/ingest', {
+  const ingested = await authedJsonFetch<{ item: { id: string; title: string | null } }>('/api/inbox/ingest', {
     method: 'POST',
     body: JSON.stringify({
       workspaceId: params.workspaceId,
@@ -166,6 +166,18 @@ export async function uploadAndIngestFile(params: {
       tagIds: params.tagIds ?? [],
     }),
   });
+
+  // Start AI reading (OCR or speech-to-text + summary + deadline) right away. Not awaited:
+  // the upload is already safe, and the summary shows up in the inbox when the AI finishes.
+  // Quota errors (402) are fine to ignore here; the web inbox offers "AI로 읽기" again.
+  void requestAiProcessing(ingested.item.id).catch(() => {});
+
+  return ingested;
+}
+
+/** Asks the server to run AI processing for one inbox item (idempotent on the server side). */
+export async function requestAiProcessing(itemId: string): Promise<void> {
+  await authedJsonFetch<unknown>(`/api/inbox/${encodeURIComponent(itemId)}/ai-process`, { method: 'POST' });
 }
 
 export async function createQuickCapture(params: {
@@ -194,7 +206,7 @@ export async function createQuickCapture(params: {
 export async function triageInboxItem(
   itemId: string,
   payload:
-    | { workspaceId: string; action: 'convert_to_task'; taskTitle: string }
+    | { workspaceId: string; action: 'convert_to_task'; taskTitle: string; taskDueAt?: string }
     | { workspaceId: string; action: 'link_to_project'; projectId: string }
     | { workspaceId: string; action: 'archive' }
 ): Promise<void> {

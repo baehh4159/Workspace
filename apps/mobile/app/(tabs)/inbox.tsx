@@ -2,6 +2,8 @@
  * apps/mobile/app/(tabs)/inbox.tsx
  * Mobile 2-Second One-Touch Triage Inbox with Long-Press / ⋯ 3-Zone Action Sheet parity:
  *  - Delete error rollback safely restores only the failed item without clobbering concurrent state updates
+ *  - Shows the deadline / amount found in the text (shared @workspace/core/deadline) and saves the
+ *    deadline as the task's due date on "할 일로"
  */
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
@@ -18,6 +20,7 @@ import { getAccessToken, supabaseMobile } from '@/lib/supabase-mobile';
 import { useWorkspace } from '@/lib/workspace-context';
 import { triageInboxItem } from '@/lib/workspace-api';
 import { ActionSheetModal, type MobileActionItem } from '@/components/action-sheet-modal';
+import { detectAmount, detectDeadline, relativeDueLabel } from '@workspace/core/deadline';
 
 interface MobileInboxItem {
   id: string;
@@ -28,6 +31,18 @@ interface MobileInboxItem {
   visibility: 'private' | 'team';
   triageStatus: 'unprocessed' | 'auto_folded';
   isOwner: boolean;
+  deadline: { dueAt: string; label: string; shortLabel: string; daysFromToday: number } | null;
+  amountLabel: string | null;
+}
+
+function buildTaskPayload(item: MobileInboxItem): { action: 'convert_to_task'; taskTitle: string; taskDueAt?: string } {
+  const base = item.title || item.rawText?.slice(0, 80) || '새 할 일';
+  const title = item.amountLabel && !base.includes(item.amountLabel) ? `${base} · ${item.amountLabel}` : base;
+  return {
+    action: 'convert_to_task',
+    taskTitle: title.slice(0, 200),
+    ...(item.deadline ? { taskDueAt: item.deadline.dueAt } : {}),
+  };
 }
 
 interface MobileProjectOption {
@@ -37,7 +52,7 @@ interface MobileProjectOption {
 }
 
 type PendingTriagePayload =
-  | { action: 'convert_to_task'; taskTitle: string }
+  | { action: 'convert_to_task'; taskTitle: string; taskDueAt?: string }
   | { action: 'link_to_project'; projectId: string }
   | { action: 'archive' };
 
@@ -103,17 +118,33 @@ export default function MobileInboxScreen() {
       ]);
 
       const currentUserId = userRes.data.user?.id ?? '';
+      const now = new Date();
       setItems(
-        (inboxRes.data ?? []).map((row) => ({
-          id: row.id as string,
-          sourceType: row.source_type as MobileInboxItem['sourceType'],
-          title: (row.title as string | null) ?? null,
-          summaryText: (row.summary_text as string | null) ?? null,
-          rawText: (row.raw_text as string | null) ?? null,
-          visibility: row.visibility as 'private' | 'team',
-          triageStatus: row.triage_status as 'unprocessed' | 'auto_folded',
-          isOwner: row.owner_user_id === currentUserId,
-        }))
+        (inboxRes.data ?? []).map((row) => {
+          const text = [row.summary_text, row.raw_text, row.title]
+            .filter((t): t is string => typeof t === 'string' && t.length > 0)
+            .join('\n');
+          const deadline = detectDeadline(text, now);
+          return {
+            id: row.id as string,
+            sourceType: row.source_type as MobileInboxItem['sourceType'],
+            title: (row.title as string | null) ?? null,
+            summaryText: (row.summary_text as string | null) ?? null,
+            rawText: (row.raw_text as string | null) ?? null,
+            visibility: row.visibility as 'private' | 'team',
+            triageStatus: row.triage_status as 'unprocessed' | 'auto_folded',
+            isOwner: row.owner_user_id === currentUserId,
+            deadline: deadline
+              ? {
+                  dueAt: deadline.dueAt,
+                  label: deadline.label,
+                  shortLabel: deadline.shortLabel,
+                  daysFromToday: deadline.daysFromToday,
+                }
+              : null,
+            amountLabel: detectAmount(text)?.label ?? null,
+          };
+        })
       );
       setProjects(
         (projRes.data ?? []).map((p) => ({
@@ -245,10 +276,7 @@ export default function MobileInboxScreen() {
         onSelect: () =>
           queueTriage(
             item,
-            {
-              action: 'convert_to_task',
-              taskTitle: item.title || item.rawText?.slice(0, 80) || '새 할 일',
-            },
+            buildTaskPayload(item),
             '할 일로 전환했습니다'
           ),
       },
@@ -338,6 +366,25 @@ export default function MobileInboxScreen() {
                 {item.summaryText || item.rawText}
               </Text>
             )}
+            {(item.deadline || item.amountLabel) && (
+              <View style={styles.chipRow}>
+                {item.deadline && (
+                  <Text
+                    style={[
+                      styles.chip,
+                      item.deadline.daysFromToday < 0
+                        ? styles.chipOverdue
+                        : item.deadline.daysFromToday <= 3
+                          ? styles.chipSoon
+                          : styles.chipLater,
+                    ]}
+                  >
+                    📅 {item.deadline.label} 마감 · {relativeDueLabel(item.deadline.daysFromToday)}
+                  </Text>
+                )}
+                {item.amountLabel && <Text style={[styles.chip, styles.chipAmount]}>💳 {item.amountLabel}</Text>}
+              </View>
+            )}
           </View>
         </View>
 
@@ -346,16 +393,15 @@ export default function MobileInboxScreen() {
             onPress={() =>
               queueTriage(
                 item,
-                {
-                  action: 'convert_to_task',
-                  taskTitle: item.title || item.rawText?.slice(0, 80) || '새 할 일',
-                },
+                buildTaskPayload(item),
                 '할 일로 전환했습니다'
               )
             }
             style={styles.primaryBtn}
           >
-            <Text style={styles.primaryBtnText}>할 일로</Text>
+            <Text style={styles.primaryBtnText}>
+              {item.deadline ? `할 일로 · ${item.deadline.shortLabel} 마감` : '할 일로'}
+            </Text>
           </Pressable>
 
           {projects.length > 0 && (
@@ -522,6 +568,12 @@ const styles = StyleSheet.create({
   moreBtn: { paddingHorizontal: 4, paddingVertical: 2 },
   moreBtnText: { fontSize: 16, fontWeight: '700', color: '#94A3B8' },
   cardBody: { fontSize: 13, color: '#475569', lineHeight: 18 },
+  chipRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 6, marginTop: 6 },
+  chip: { fontSize: 12, fontWeight: '600', paddingHorizontal: 8, paddingVertical: 3, borderRadius: 999, overflow: 'hidden' },
+  chipOverdue: { backgroundColor: '#FEF2F2', color: '#B91C1C' },
+  chipSoon: { backgroundColor: '#FFFBEB', color: '#92400E' },
+  chipLater: { backgroundColor: '#EFF6FF', color: '#1E40AF' },
+  chipAmount: { backgroundColor: '#F1F5F9', color: '#334155', fontWeight: '500' },
   actionRow: { flexDirection: 'row', gap: 8, marginTop: 2 },
   primaryBtn: {
     flex: 1,

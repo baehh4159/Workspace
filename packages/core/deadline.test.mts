@@ -1,10 +1,10 @@
 /**
- * Run: pnpm --filter web test
+ * Run: pnpm --filter @workspace/core test
  * (node --test with built-in TypeScript stripping; no extra dependencies)
  */
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { detectAmount, detectDeadline, relativeDueLabel } from './deadline-detect.ts';
+import { detectAmount, detectDeadline, relativeDueLabel } from './deadline.ts';
 
 // Saturday 2026-11-21 10:00 KST
 const NOW = new Date('2026-11-21T01:00:00Z');
