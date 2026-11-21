@@ -22,11 +22,13 @@ import {
   uploadAndIngest,
 } from '@/lib/upload-client';
 import { pricingHref } from '@/lib/plans';
+import type { OnboardingState } from '@/components/onboarding-checklist';
 import type { WorkspaceTag } from '@/components/workspace-primitives';
 
 export function TodayClientShell({
   workspaceId,
   initialNotice = null,
+  onboarding,
   unprocessedCount,
   events,
   initialTasks,
@@ -35,6 +37,7 @@ export function TodayClientShell({
   workspaceId: string;
   /** Message shown once after joining a team via share link (or failing to). */
   initialNotice?: string | null;
+  onboarding?: OnboardingState;
   unprocessedCount: number;
   events: TodayEvent[];
   initialTasks: TodayTask[];
@@ -275,6 +278,7 @@ export function TodayClientShell({
       )}
       <TodayView
         unprocessedCount={unprocessedCount}
+        onboarding={onboarding}
         events={events}
         initialTasks={initialTasks}
         tags={tags}

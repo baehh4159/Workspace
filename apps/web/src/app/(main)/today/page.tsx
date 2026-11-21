@@ -8,6 +8,7 @@ import { getServerWorkspaceSession } from '@/lib/supabase-server';
 import { TodayClientShell } from '@/components/today-client-shell';
 import type { TodayEvent, TodayTask } from '@/components/today-view';
 import type { WorkspaceTag } from '@/components/workspace-primitives';
+import type { OnboardingState } from '@/components/onboarding-checklist';
 
 export const dynamic = 'force-dynamic';
 
@@ -54,7 +55,8 @@ export default async function TodayPage({
   const wsId = session.activeWorkspace.id;
   const { startIso, endIso } = getKstDayBounds();
 
-  const [countRes, eventsRes, tasksRes, tagsRes] = await Promise.all([
+  const uid = session.user.id;
+  const [countRes, eventsRes, tasksRes, tagsRes, memoRes, uploadRes, docTaskRes, shareRes] = await Promise.all([
     session.userClient
       .from('inbox_items')
       .select('id', { count: 'exact', head: true })
@@ -83,7 +85,34 @@ export default async function TodayPage({
       .eq('workspace_id', wsId)
       .order('kind', { ascending: true })
       .order('label', { ascending: true }),
+    // Onboarding checklist (head-only counts across the user's own items)
+    session.userClient
+      .from('inbox_items')
+      .select('id', { count: 'exact', head: true })
+      .eq('owner_user_id', uid)
+      .in('source_type', ['quick_text', 'quick_tag', 'quick_voice']),
+    session.userClient
+      .from('inbox_items')
+      .select('id', { count: 'exact', head: true })
+      .eq('owner_user_id', uid)
+      .eq('source_type', 'scanner_doc'),
+    session.userClient
+      .from('tasks')
+      .select('id', { count: 'exact', head: true })
+      .eq('owner_user_id', uid)
+      .not('source_inbox_item_id', 'is', null),
+    session.userClient
+      .from('share_tokens')
+      .select('id', { count: 'exact', head: true })
+      .eq('created_by', uid),
   ]);
+
+  const onboarding: OnboardingState = {
+    memo: (memoRes.count ?? 0) > 0,
+    upload: (uploadRes.count ?? 0) > 0,
+    docToTask: (docTaskRes.count ?? 0) > 0,
+    invite: session.workspaces.some((w) => w.type === 'team') || (shareRes.count ?? 0) > 0,
+  };
 
   const events: TodayEvent[] = (eventsRes.data ?? []).map((e) => ({
     id: e.id as string,
@@ -120,6 +149,7 @@ export default async function TodayPage({
       key={wsId}
       workspaceId={wsId}
       initialNotice={initialNotice}
+      onboarding={onboarding}
       unprocessedCount={countRes.count ?? 0}
       events={events}
       initialTasks={initialTasks}

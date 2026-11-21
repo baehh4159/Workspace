@@ -13,6 +13,7 @@ import { useRouter } from 'next/navigation';
 import { TagChip, VisibilityBadge, type WorkspaceTag } from '@/components/workspace-primitives';
 import { ContextMenuWrapper, type ContextMenuItem } from '@/components/context-menu';
 import { relativeDueLabel } from '@/lib/deadline-detect';
+import { OnboardingChecklist, type OnboardingState } from '@/components/onboarding-checklist';
 import { useDialog } from '@/components/dialog-provider';
 
 export interface TodayEvent {
@@ -103,6 +104,7 @@ function pickRecorderMimeType(): string | undefined {
 }
 
 export function TodayView({
+  onboarding,
   unprocessedCount = 0,
   events: initialEvents = [],
   initialTasks = [],
@@ -115,6 +117,7 @@ export function TodayView({
   onUpdateEventVisibility,
   onDeleteEvent,
 }: {
+  onboarding?: OnboardingState;
   unprocessedCount?: number;
   events?: TodayEvent[];
   initialTasks?: TodayTask[];
@@ -506,6 +509,8 @@ export function TodayView({
 
   return (
     <div className="mx-auto max-w-3xl space-y-6 px-4 py-8 sm:px-6">
+      {onboarding && <OnboardingChecklist state={onboarding} />}
+
       {unprocessedCount > 0 && (
         <Link
           href="/inbox"
@@ -546,6 +551,7 @@ export function TodayView({
 
         <div className="flex flex-wrap items-center gap-2 sm:flex-nowrap">
           <input
+            id="quick-capture-input"
             type="text"
             value={rawText}
             onChange={(e) => setRawText(e.target.value)}

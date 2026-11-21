@@ -20,6 +20,16 @@ export interface ProjectListItem {
   status: 'active' | 'archived';
   isOwner: boolean;
   updatedAt: string;
+  taskTotal?: number;
+  taskDone?: number;
+  overdueCount?: number;
+  /** Earliest due date among open tasks that are not overdue. */
+  nextDueAt?: string | null;
+}
+
+function shortKstDate(iso: string): string {
+  const k = new Date(new Date(iso).getTime() + 9 * 3_600_000);
+  return `${k.getUTCMonth() + 1}/${k.getUTCDate()}`;
 }
 
 export function ProjectsView({
@@ -315,6 +325,34 @@ export function ProjectsView({
                   <div className="flex items-center justify-between gap-3 rounded-xl border border-slate-200 bg-white px-4 py-3.5 transition-colors hover:border-blue-300">
                     <Link href={`/projects/${proj.id}`} className="min-w-0 flex-1">
                       <p className="truncate text-sm font-semibold text-slate-900">{proj.title}</p>
+                      {(proj.taskTotal ?? 0) > 0 && (
+                        <div className="mt-1.5 flex items-center gap-2">
+                          <div
+                            className="h-1.5 w-24 overflow-hidden rounded-full bg-slate-100"
+                            role="progressbar"
+                            aria-label="완료한 할 일 비율"
+                            aria-valuemin={0}
+                            aria-valuemax={proj.taskTotal}
+                            aria-valuenow={proj.taskDone ?? 0}
+                          >
+                            <div
+                              className="h-full rounded-full bg-blue-700"
+                              style={{ width: `${Math.round(((proj.taskDone ?? 0) / (proj.taskTotal ?? 1)) * 100)}%` }}
+                            />
+                          </div>
+                          <span className="text-xs text-slate-600">
+                            할 일 {proj.taskDone ?? 0}/{proj.taskTotal}
+                          </span>
+                          {(proj.overdueCount ?? 0) > 0 && (
+                            <span className="rounded-full bg-red-50 px-1.5 py-0.5 text-[11px] font-semibold text-red-700">
+                              지난 마감 {proj.overdueCount}
+                            </span>
+                          )}
+                          {proj.nextDueAt && (
+                            <span className="text-xs text-slate-500">다음 마감 {shortKstDate(proj.nextDueAt)}</span>
+                          )}
+                        </div>
+                      )}
                       <p className="mt-0.5 text-xs text-slate-400">
                         최근 수정:{' '}
                         {new Date(proj.updatedAt).toLocaleDateString('ko-KR', {
