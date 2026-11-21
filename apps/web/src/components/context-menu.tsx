@@ -7,6 +7,7 @@
  *  - Identical menu items for desktop right-click (onContextMenu) and card ⋯ button
  *  - Browser-native right-click guard: never intercepts <input>, <textarea>, contenteditable, or active text selection
  *  - Full WAI-ARIA role="menu" / role="menuitem" + ArrowUp/ArrowDown/Enter/Escape/Tab + viewport clamping
+ *  - Closes on real page scrolls only (late scroll events right after opening are ignored)
  */
 import React, { useCallback, useEffect, useId, useLayoutEffect, useRef, useState } from 'react';
 
@@ -148,7 +149,20 @@ export function ContextMenuWrapper({
         closeMenu(false);
       }
     };
-    const onScroll = () => closeMenu(false);
+    // Close when the page really scrolls (the anchor moved), but ignore scroll events that are
+    // still arriving from the scroll that preceded the tap (momentum scrolling on phones,
+    // scroll-into-view before a click) — otherwise the menu closes the moment it opens.
+    const openedAt = performance.now();
+    const startScrollY = window.scrollY;
+    const onScroll = (e: Event) => {
+      if (performance.now() - openedAt < 250) return;
+      const target = e.target;
+      if (target instanceof Node && menuRef.current?.contains(target)) return;
+      const isPageScroll =
+        target === document || target === document.documentElement || target === document.body;
+      if (isPageScroll && Math.abs(window.scrollY - startScrollY) < 4) return;
+      closeMenu(false);
+    };
     const onKeyDown = (e: KeyboardEvent) => {
       if (e.key === 'Tab') {
         closeMenu(false);
