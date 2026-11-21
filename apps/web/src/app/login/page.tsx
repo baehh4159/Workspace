@@ -102,7 +102,19 @@ export default async function LoginPage({
           </a>
         </div>
 
-        <p className="mt-6 text-center text-[11px] leading-relaxed text-slate-400">
+        <p className="mt-4 text-center text-[11px] leading-relaxed text-slate-400">
+          계속하면{' '}
+          <Link href="/legal/terms" className="underline underline-offset-2 hover:text-slate-600">
+            이용약관
+          </Link>
+          과{' '}
+          <Link href="/legal/privacy" className="underline underline-offset-2 hover:text-slate-600">
+            개인정보처리방침
+          </Link>
+          에 동의하는 것으로 봅니다.
+        </p>
+
+        <p className="mt-4 text-center text-[11px] leading-relaxed text-slate-400">
           팀 공유 링크로 초대받으셨다면 공유받은 링크에서 바로 합류하실 수도 있습니다.
         </p>
         <p className="mt-3 text-center text-[11px] text-slate-400">

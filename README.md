@@ -38,6 +38,7 @@ pnpm dev
 
 - 가격, 플랜 이름, 기능 목록, 한도: `apps/web/src/lib/plans.ts` (현재 가격은 제안값)
 - 서비스 이름과 한 줄 소개: `apps/web/src/lib/brand.ts`
+- 사업자 정보(하단 표시·약관): `apps/web/src/lib/company.ts` — 이용약관·개인정보처리방침·환불정책(`/legal/*`)은 **초안**이므로 공개 전에 법률 검토를 받으세요.
 - 실제 모드에서 결제사 연동 전까지는 업그레이드 클릭이 `billing_upgrade_intents` 테이블에 사전 신청으로 쌓입니다. `supabase/migrations/0008_phase8_upgrade_intents.sql`을 적용하세요.
 
 ## 개발 명령어
