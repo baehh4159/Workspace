@@ -10,6 +10,7 @@
  */
 import React, { useEffect, useState } from 'react';
 import type { ResolvedGuestShare } from '@/lib/guest-share';
+import { BRAND } from '@/lib/brand';
 
 function isImageSignedUrl(url: string | null): boolean {
   if (!url) return false;
@@ -140,8 +141,24 @@ export function SharedGuestView({
               onClick={() => setShowJoinSheet(true)}
               className="shrink-0 rounded-lg bg-blue-700 px-4 py-2 text-xs font-semibold text-white hover:bg-blue-800"
             >
-              완료 체크하고 팀에서 함께 보기
+              {data.publicChecklist.length > 0 ? '완료 체크하고 팀에서 함께 보기' : '팀에 합류해서 함께 보기'}
             </button>
+          </div>
+        </div>
+      )}
+
+      {!canJoinTeam && (
+        <div className="fixed inset-x-0 bottom-0 border-t border-slate-200 bg-white/95 px-4 py-3 backdrop-blur">
+          <div className="mx-auto flex max-w-2xl items-center justify-between gap-3">
+            <span className="text-xs text-slate-600">
+              {BRAND.name}로 공유된 페이지 · {BRAND.tagline}
+            </span>
+            <a
+              href="/"
+              className="shrink-0 rounded-lg bg-blue-700 px-4 py-2 text-xs font-semibold text-white hover:bg-blue-800"
+            >
+              나도 무료로 써 보기
+            </a>
           </div>
         </div>
       )}

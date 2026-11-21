@@ -109,6 +109,7 @@ export default async function ProjectDetailPage({
     <ProjectDetailView
       key={project.id as string}
       workspaceId={wsId}
+      workspaceType={session.activeWorkspace.type}
       project={{
         id: project.id as string,
         title: project.title as string,

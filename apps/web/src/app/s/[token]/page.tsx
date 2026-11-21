@@ -4,10 +4,19 @@
  * and renders SharedGuestView without ever exposing private records.
  */
 import React from 'react';
+import type { Metadata } from 'next';
 import { resolveGuestShareByToken } from '@/lib/guest-share';
 import { SharedGuestView } from '@/components/shared-guest-view';
 
 export const dynamic = 'force-dynamic';
+
+// Shared documents must never be indexed, and the token in the URL must not leak via Referer
+// when the guest opens the original file or any outbound link.
+export const metadata: Metadata = {
+  title: '공유된 문서',
+  robots: { index: false, follow: false, nocache: true },
+  referrer: 'no-referrer',
+};
 
 export default async function GuestSharePage({
   params,
@@ -36,7 +45,7 @@ export default async function GuestSharePage({
     <SharedGuestView
       shareToken={token}
       data={resolved.payload}
-      canJoinTeam={resolved.scope === 'view_and_join'}
+      canJoinTeam={resolved.scope === 'view_and_join' && resolved.workspaceType === 'team'}
     />
   );
 }

@@ -38,12 +38,14 @@ export interface LinkedDocItem {
 
 export function ProjectDetailView({
   workspaceId,
+  workspaceType = 'team',
   project,
   initialTasks,
   initialRecords,
   linkedDocs,
 }: {
   workspaceId: string;
+  workspaceType?: 'personal' | 'team';
   project: { id: string; title: string; visibility: 'private' | 'team' };
   initialTasks: ProjectTaskItem[];
   initialRecords: ProjectRecordItem[];
@@ -58,10 +60,14 @@ export function ProjectDetailView({
 
   const [showSharePanel, setShowSharePanel] = useState(false);
   const [expiresInDays, setExpiresInDays] = useState<7 | 14 | 30>(14);
-  const [shareScope, setShareScope] = useState<'view_and_join' | 'read_only'>('view_and_join');
+  const [shareScope, setShareScope] = useState<'view_and_join' | 'read_only'>(
+    workspaceType === 'team' ? 'view_and_join' : 'read_only'
+  );
   const [creatingShare, setCreatingShare] = useState(false);
   const [createdShareUrl, setCreatedShareUrl] = useState<string | null>(null);
   const [copied, setCopied] = useState(false);
+  const sharedTaskCount = tasks.filter((t) => t.visibility === 'team').length;
+  const privateTaskCount = tasks.length - sharedTaskCount;
 
   const [noteText, setNoteText] = useState('');
   const [noteVisibility, setNoteVisibility] = useState<'private' | 'team'>('private');
@@ -152,12 +158,24 @@ export function ProjectDetailView({
       }
       const data = (await res.json()) as { shareUrl?: string };
       if (data.shareUrl) {
-        setCreatedShareUrl(data.shareUrl);
+        // The API may return a path; a path alone cannot be sent to anyone.
+        setCreatedShareUrl(new URL(data.shareUrl, window.location.origin).toString());
       }
     } catch {
       setErrorMsg('네트워크 오류로 공유 링크를 생성하지 못했습니다.');
     } finally {
       setCreatingShare(false);
+    }
+  };
+
+  const canNativeShare = typeof navigator !== 'undefined' && typeof navigator.share === 'function';
+
+  const handleNativeShare = async () => {
+    if (!createdShareUrl || !canNativeShare) return;
+    try {
+      await navigator.share({ title: project.title, url: createdShareUrl });
+    } catch {
+      // Cancelled by the user
     }
   };
 
@@ -376,8 +394,17 @@ export function ProjectDetailView({
             <div className="space-y-1">
               <p className="text-xs font-semibold text-slate-900">비로그인 게스트 공유 링크 발급</p>
               <p className="text-[11px] text-slate-500">
-                팀 공개 체크리스트만 표시되며, 작성자의 개인 기록(나만 보기)은 절대 노출되지 않습니다.
+                {sharedTaskCount > 0
+                  ? `받는 사람에게는 '팀 공유' 할 일 ${sharedTaskCount}개가 보입니다. '나만 보기' 할 일${
+                      privateTaskCount > 0 ? ` ${privateTaskCount}개` : ''
+                    }와 기록은 보이지 않습니다.`
+                  : '팀 공개 체크리스트만 표시되며, 작성자의 개인 기록(나만 보기)은 절대 노출되지 않습니다.'}
               </p>
+              {sharedTaskCount === 0 && privateTaskCount > 0 && (
+                <p className="text-[11px] font-medium text-amber-800">
+                  지금은 받는 사람에게 프로젝트 제목만 보입니다. 함께 볼 할 일은 ⋯ 메뉴에서 &lsquo;팀 공유로 전환&rsquo;하세요.
+                </p>
+              )}
             </div>
             <div className="flex flex-wrap items-center gap-2">
               <select
@@ -394,7 +421,7 @@ export function ProjectDetailView({
                 onChange={(e) => setShareScope(e.target.value as 'view_and_join' | 'read_only')}
                 className="rounded-lg border border-slate-200 bg-[#F7F8FA] px-2.5 py-1.5 text-xs text-slate-800"
               >
-                <option value="view_and_join">열람 + 1클릭 팀 합류</option>
+                {workspaceType === 'team' && <option value="view_and_join">열람 + 1클릭 팀 합류</option>}
                 <option value="read_only">열람 전용</option>
               </select>
               <button
@@ -423,6 +450,15 @@ export function ProjectDetailView({
               >
                 {copied ? '복사됨' : '복사'}
               </button>
+              {canNativeShare && (
+                <button
+                  type="button"
+                  onClick={() => void handleNativeShare()}
+                  className="shrink-0 rounded-md bg-blue-700 px-2.5 py-1 text-xs font-semibold text-white hover:bg-blue-800"
+                >
+                  보내기
+                </button>
+              )}
             </div>
           )}
         </section>

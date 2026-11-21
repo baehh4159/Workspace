@@ -16,6 +16,8 @@ const SIGNED_URL_TTL_SECONDS = 120;
 
 export interface ResolvedGuestShare {
   scope: 'read_only' | 'view_and_join';
+  /** Joining is only possible for team workspaces. */
+  workspaceType: 'personal' | 'team';
   payload: {
     entityType: 'inbox_item' | 'project' | 'task';
     title: string;
@@ -53,6 +55,13 @@ export async function resolveGuestShareByToken(
   ) {
     return null;
   }
+
+  const { data: ws } = await adminClient
+    .from('workspaces')
+    .select('type')
+    .eq('id', share.workspace_id)
+    .maybeSingle();
+  const workspaceType: 'personal' | 'team' = ws?.type === 'team' ? 'team' : 'personal';
 
   let title = '공유된 항목';
   let summaryText: string | null = null;
@@ -148,6 +157,7 @@ export async function resolveGuestShareByToken(
 
   return {
     scope: share.scope as 'read_only' | 'view_and_join',
+    workspaceType,
     payload: parsed.data,
   };
 }
